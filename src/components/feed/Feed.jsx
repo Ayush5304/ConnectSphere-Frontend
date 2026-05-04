@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { postApi, followApi, authApi } from '../../api';
 import { useAuth } from '../../context/AuthContext';
 import { Link } from 'react-router-dom';
@@ -28,51 +28,102 @@ function SkeletonCard() {
 
 export default function Feed() {
   const { user } = useAuth();
-  const [posts, setPosts]           = useState([]);
-  const [loading, setLoading]       = useState(true);
-  const [error, setError]           = useState('');
-  const [suggestions, setSuggestions] = useState([]);
+  const [posts, setPosts]               = useState([]);
+  const [loading, setLoading]           = useState(true);
+  const [error, setError]               = useState('');
+  const [suggestions, setSuggestions]   = useState([]);
   const [followingMap, setFollowingMap] = useState({});
 
   const isGuest = !user || user.role === 'GUEST';
 
-  useEffect(() => {
-    const load = async () => {
-      try {
-        if (isGuest) {
-          const { data } = await postApi.getFeed();
-          setPosts(data);
-        } else {
-          const { data } = await postApi.getFeed();
-          setPosts(data);
-        }
-        setError('');
-      } catch {
-        try {
-          const { data } = await postApi.getFeed();
-          setPosts(data || []);
-        } catch {
-          setPosts([]);
-        }
-        setError('');
-      } finally {
-        setLoading(false);
-      }
-    };
-    load();
+  // ── BUG-FIX: Proper personalized feed loading ──────────────────────────────
+  //
+  // Original bug: both guest and logged-in users called the same public
+  // getFeed() endpoint. This meant:
+  //   1. A logged-in user's own new posts would not appear after refresh
+  //      if the public feed didn't include them.
+  //   2. Posts from followed users were never fetched.
+  //
+  // Fix: For logged-in users we:
+  //   a) Fetch the list of followed user IDs.
+  //   b) Add the current user's own ID so their own posts always appear.
+  //   c) Call getFeedForUsers() which returns the personalised feed.
+  //   d) Fall back to getFeed() if that fails or returns nothing.
+  // ──────────────────────────────────────────────────────────────────────────
 
+  const loadFeed = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    try {
+      if (isGuest) {
+        // Public / guest feed — no auth needed
+        const { data } = await postApi.getFeed();
+        setPosts(Array.isArray(data) ? data : []);
+      } else {
+        // Logged-in user — load personalised feed
+        let feedPosts = [];
+        try {
+          // Step 1: Get the IDs of everyone this user follows
+          const { data: followingIds } = await followApi.getFollowing(user.userId);
+
+          // Step 2: Always include the user's own posts in the feed
+          const ids = Array.isArray(followingIds) ? followingIds : [];
+          if (!ids.includes(Number(user.userId)) && !ids.includes(String(user.userId))) {
+            ids.push(Number(user.userId));
+          }
+
+          if (ids.length > 0) {
+            // Step 3: Fetch posts for those specific users
+            const { data } = await postApi.getFeedForUsers(ids);
+            feedPosts = Array.isArray(data) ? data : [];
+          }
+        } catch {
+          // Silently fall through to the global feed
+        }
+
+        // Step 4: If personalised feed is empty, fall back to the global public feed
+        if (feedPosts.length === 0) {
+          try {
+            const { data } = await postApi.getFeed();
+            feedPosts = Array.isArray(data) ? data : [];
+          } catch {
+            feedPosts = [];
+          }
+        }
+
+        setPosts(feedPosts);
+      }
+    } catch {
+      setError('Could not load feed. Please try again.');
+      setPosts([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [user, isGuest]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    loadFeed();
+
+    // Load follow suggestions for logged-in users
     if (!isGuest && user) {
       followApi.getSuggestions(user.userId)
         .then(({ data: ids }) => {
-          if (ids.length > 0) {
+          const idList = Array.isArray(ids) ? ids : [];
+          if (idList.length > 0) {
             Promise.all(
-              ids.slice(0, 5).map(id => authApi.getUserById(id).then(r => r.data).catch(() => null))
+              idList.slice(0, 5).map(id =>
+                authApi.getUserById(id).then(r => r.data).catch(() => null)
+              )
             ).then(us => setSuggestions(us.filter(Boolean)));
           }
         }).catch(() => {});
     }
-  }, [user]);
+  }, [loadFeed, isGuest, user]);
 
+  // ── Post lifecycle callbacks ───────────────────────────────────────────────
+
+  // New post created — prepend to local state immediately (optimistic update).
+  // The post is already persisted in the backend at this point.
   const handleCreated = (post) => setPosts(prev => [post, ...prev]);
 
   const handleDelete = async (postId) => {
@@ -107,7 +158,7 @@ export default function Feed() {
                   <p className="font-bold text-slate-800 text-sm">Welcome to ConnectSphere</p>
                   <p className="text-xs text-slate-500 mt-0.5">
                     <Link to="/register" className="text-indigo-600 font-semibold hover:underline">Sign up</Link> or{' '}
-                    <Link to="/login" className="text-indigo-600 font-semibold hover:underline">log in</Link> to post, like, comment & follow people.
+                    <Link to="/login" className="text-indigo-600 font-semibold hover:underline">log in</Link> to post, like, comment &amp; follow people.
                   </p>
                 </div>
                 <Link to="/register" className="btn-primary text-xs py-2 px-4 flex-shrink-0">Join Free</Link>
@@ -122,6 +173,9 @@ export default function Feed() {
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
                 {error}
               </p>
+              <button onClick={loadFeed} className="text-xs text-indigo-600 font-semibold mt-2 hover:underline">
+                Retry
+              </button>
             </div>
           )}
 
