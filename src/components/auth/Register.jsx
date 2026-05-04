@@ -26,12 +26,28 @@ export default function Register() {
     if (form.password.length < 6) { setError('Password must be at least 6 characters.'); return; }
     setError(''); setLoading(true);
     try {
-      await authApi.requestRegisterOtp(form);
+      await requestSignupOtp(form);
       setOtpStep(true);
     } catch (err) {
       const msg = err.response?.data;
       setError(typeof msg === 'string' ? msg : msg?.message || msg?.error || 'Registration failed.');
     } finally { setLoading(false); }
+  };
+
+  const requestSignupOtp = async (payload) => {
+    try {
+      return await authApi.requestRegisterOtp(payload);
+    } catch (err) {
+      const msg = err.response?.data;
+      const text = typeof msg === 'string' ? msg : msg?.message || msg?.error || '';
+      if (!text.toLowerCase().includes('username is already taken')) throw err;
+
+      const uniqueSuffix = Date.now().toString(36);
+      const fallbackUsername = `${payload.username || payload.fullName.replace(/\s+/g, '').toLowerCase()}_${uniqueSuffix}`;
+      const retryPayload = { ...payload, username: fallbackUsername };
+      setForm(prev => ({ ...prev, username: fallbackUsername }));
+      return authApi.requestRegisterOtp(retryPayload);
+    }
   };
 
   const handleVerifyOtp = async (e) => {
@@ -94,7 +110,7 @@ export default function Register() {
                   onChange={e => setForm({ ...form, fullName: e.target.value, username: e.target.value.replace(/\s+/g, '').toLowerCase() })}
                   required />
                 {form.username && (
-                  <p className="text-xs text-slate-400 mt-1">Username: <span className="text-indigo-600 font-semibold">@{form.username}</span></p>
+                  <p className="text-xs text-slate-400 mt-1">Display name: <span className="text-indigo-600 font-semibold">{form.fullName}</span></p>
                 )}
               </div>
               <div>

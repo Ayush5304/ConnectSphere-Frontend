@@ -99,7 +99,7 @@ export default function Feed() {
     } finally {
       setLoading(false);
     }
-  }, [user, isGuest]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [user, isGuest]);
 
   useEffect(() => {
     loadFeed();

@@ -129,6 +129,9 @@ export const authApi = {
   /* ADMIN: Get all users list */
   getAllUsers:     ()                  => axios.get(`${API}/auth/admin/users`, authHeader()),
 
+  getReportedUsers:()                  => axios.get(`${API}/auth/admin/reported-users`, authHeader()),
+  clearUserReport: (userId)            => axios.put(`${API}/auth/admin/users/${userId}/clear-report`, {}, authHeader()),
+
   /* ADMIN: Change a user's role (USER/ADMIN/GUEST) */
   changeRole:     (userId, role)      => axios.put(`${API}/auth/admin/users/${userId}/role?role=${role}`, {}, authHeader()),
 
@@ -218,6 +221,10 @@ export const commentApi = {
 
   /* ADMIN: Hard delete any comment */
   adminDelete: (id)          => axios.delete(`${API}/comments/admin/${id}`, authHeader()),
+
+  report:      (id, reason)  => axios.post(`${API}/comments/${id}/report`, { reason }, authHeader()),
+  adminGetReported: ()       => axios.get(`${API}/comments/admin/reported`, authHeader()),
+  adminClearReport: (id)     => axios.put(`${API}/comments/admin/${id}/clear-report`, {}, authHeader()),
 };
 
 /*

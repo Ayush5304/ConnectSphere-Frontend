@@ -467,6 +467,12 @@ export default function PostCard({ post, onDelete }) {
                       <button onClick={() => { setEditingCommentId(c.commentId); setEditingCommentText(c.content); }}
                         className="text-xs text-gray-500 hover:text-violet-600">Edit</button>
                     )}
+                    {!isGuest && user && String(user.userId) !== String(c.userId) && (
+                      <button onClick={async () => {
+                        const reason = window.prompt('Why are you reporting this comment?');
+                        if (reason?.trim()) await commentApi.report(c.commentId, reason.trim()).catch(() => {});
+                      }} className="text-xs text-gray-400 hover:text-red-500">Report</button>
+                    )}
                     {(user && String(user.userId) === String(c.userId) || isAdmin) && (
                       <button onClick={async () => {
                         await commentApi.delete(c.commentId).catch(() => {});

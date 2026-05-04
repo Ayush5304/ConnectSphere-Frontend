@@ -9,6 +9,7 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [showPass, setShowPass] = useState(false);
   const [otpMode, setOtpMode] = useState(false);
+  const [adminMode, setAdminMode] = useState(false);
   const [otpSent, setOtpSent] = useState(false);
   const [otp, setOtp] = useState('');
   const { login } = useAuth();
@@ -19,8 +20,12 @@ export default function Login() {
     setError(''); setLoading(true);
     try {
       const { data } = await authApi.login(form);
+      if (adminMode && data.role !== 'ADMIN') {
+        setError('This account is not an admin account.');
+        return;
+      }
       login(data);
-      navigate('/');
+      navigate(data.role === 'ADMIN' ? '/admin' : '/');
     } catch (err) {
       const msg = err.response?.data;
       const text = typeof msg === 'string' ? msg : msg?.message || msg?.error || '';
@@ -35,6 +40,15 @@ export default function Login() {
       login(data); navigate('/');
     } catch { setError('Guest login failed. Please try again.'); }
     finally { setLoading(false); }
+  };
+
+  const handleAdminMode = () => {
+    setAdminMode(true);
+    setOtpMode(false);
+    setOtpSent(false);
+    setOtp('');
+    setForm({ email: '', password: '' });
+    setError('');
   };
 
   const handleRequestOtp = async () => {
@@ -55,7 +69,7 @@ export default function Login() {
     try {
       const { data } = await authApi.verifyLoginOtp(form.email, otp);
       login(data);
-      navigate('/');
+      navigate(data.role === 'ADMIN' ? '/admin' : '/');
     } catch (err) {
       const msg = err.response?.data;
       setError(typeof msg === 'string' ? msg : msg?.message || 'Invalid OTP.');
@@ -95,8 +109,12 @@ export default function Login() {
           </div>
 
           <div className="card p-10">
-            <h2 className="text-[2rem] font-bold text-slate-900 mb-1 tracking-tight">Welcome back</h2>
-            <p className="text-slate-500 text-base mb-7">Sign in to your account</p>
+            <h2 className="text-[2rem] font-bold text-slate-900 mb-1 tracking-tight">
+              {adminMode ? 'Admin login' : 'Welcome back'}
+            </h2>
+            <p className="text-slate-500 text-base mb-7">
+              {adminMode ? 'Enter your admin email and password' : 'Sign in to your account'}
+            </p>
 
             {error && (
               <div className="bg-red-50 border border-red-200 text-red-600 text-sm px-4 py-3 rounded-lg mb-5 flex items-center gap-2">
@@ -106,11 +124,11 @@ export default function Login() {
             )}
 
             <div className="flex items-center gap-2 mb-4 text-xs">
-              <button type="button" onClick={() => { setOtpMode(false); setError(''); }}
+              <button type="button" onClick={() => { setOtpMode(false); setAdminMode(false); setError(''); }}
                 className={`px-3 py-1.5 rounded-full border ${!otpMode ? 'bg-slate-900 text-white border-slate-900' : 'text-slate-600 border-slate-200'}`}>
                 Password
               </button>
-              <button type="button" onClick={() => { setOtpMode(true); setError(''); }}
+              <button type="button" onClick={() => { setOtpMode(true); setAdminMode(false); setError(''); }}
                 className={`px-3 py-1.5 rounded-full border ${otpMode ? 'bg-slate-900 text-white border-slate-900' : 'text-slate-600 border-slate-200'}`}>
                 Email OTP
               </button>
@@ -118,12 +136,16 @@ export default function Login() {
 
             <form onSubmit={otpMode ? handleVerifyOtp : handleSubmit} className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">Email</label>
-                <input className="input-field" type="email" placeholder="you@example.com"
+                <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">
+                  {adminMode ? 'Admin Email' : 'Email'}
+                </label>
+                <input className="input-field" type="email" placeholder={adminMode ? 'admin@example.com' : 'you@example.com'}
                   value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} required />
               </div>
               {!otpMode && <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">Password</label>
+                <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">
+                  {adminMode ? 'Admin Password' : 'Password'}
+                </label>
                 <div className="relative">
                   <input className="input-field pr-10" type={showPass ? 'text' : 'password'} placeholder="••••••••"
                     value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} required />
@@ -151,9 +173,19 @@ export default function Login() {
                 </div>
               )}
 
-              <button className="btn-primary w-full py-3 mt-1 text-base" type="submit" disabled={loading}>
-                {loading ? 'Signing in…' : (otpMode ? 'Verify OTP & Sign In' : 'Sign In')}
+              <button
+                className={`${adminMode ? 'bg-rose-600 hover:bg-rose-700 text-white rounded-lg font-semibold transition-colors' : 'btn-primary'} w-full py-3 mt-1 text-base`}
+                type="submit"
+                disabled={loading}
+              >
+                {loading ? 'Signing in...' : (adminMode ? 'Sign In as Admin' : (otpMode ? 'Verify OTP & Sign In' : 'Sign In'))}
               </button>
+              {adminMode && (
+                <button type="button" onClick={() => { setAdminMode(false); setForm({ email: '', password: '' }); setError(''); }}
+                  className="btn-outline w-full py-2.5 text-sm">
+                  Back to User Login
+                </button>
+              )}
             </form>
 
             <div className="flex items-center gap-3 my-5">
@@ -172,6 +204,11 @@ export default function Login() {
                 className="flex items-center justify-center gap-3 w-full border border-slate-200 rounded-lg py-2.5 hover:bg-slate-50 text-sm font-medium text-slate-500 transition-colors">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
                 Browse as Guest
+              </button>
+              <button onClick={handleAdminMode} disabled={loading}
+                className="flex items-center justify-center gap-3 w-full border border-rose-200 rounded-lg py-2.5 hover:bg-rose-50 text-sm font-semibold text-rose-600 transition-colors">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z"/></svg>
+                Login as Admin
               </button>
             </div>
 

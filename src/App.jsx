@@ -83,7 +83,7 @@ function GuestRoute({ children }) {
  *
  * Route breakdown:
  *   /                    → Feed page (public — anyone can see posts)
- *   /profile/:userId     → Profile page (private — must be logged in)
+ *   /profile/:userId     → Profile page (public — guests can view public profiles)
  *   /forgot-password     → Forgot password page (public)
  *   /reset-password      → Reset password page (public — accessed via email link)
  *   /oauth2/callback     → Google OAuth2 redirect handler (public)
@@ -102,8 +102,8 @@ function AppRoutes() {
         {/* PUBLIC — anyone can view the feed */}
         <Route path="/" element={<Feed />} />
 
-        {/* PRIVATE — profile only for logged in users */}
-        <Route path="/profile/:userId" element={<PrivateRoute><Profile /></PrivateRoute>} />
+        {/* PUBLIC - guests can view public profiles */}
+        <Route path="/profile/:userId" element={<Profile />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/oauth2/callback" element={<OAuth2Callback />} />
