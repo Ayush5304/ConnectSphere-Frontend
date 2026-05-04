@@ -198,14 +198,14 @@ export default function StoriesBar() {
   return (
     <>
       {/* ── Stories Bar ── */}
-      <div className="flex gap-4 overflow-x-auto p-4 card mb-4 items-center">
+      <div className="flex gap-4 overflow-x-auto px-4 py-4 card cinema-card-hover mb-4 items-center">
         {/* Add Story */}
         <div className="flex flex-col items-center flex-shrink-0">
           <button onClick={() => fileRef.current.click()} disabled={uploading}
-            className="w-16 h-16 rounded-full border-2 border-dashed border-purple-300 flex items-center justify-center hover:border-purple-500 hover:bg-purple-50 disabled:opacity-50">
-            <span className="text-purple-400 text-2xl font-light">{uploading ? '…' : '+'}</span>
+            className="w-16 h-16 rounded-full border border-dashed border-neutral-300 bg-white flex items-center justify-center hover:border-neutral-500 hover:bg-neutral-50 disabled:opacity-50">
+            <span className="text-neutral-700 text-2xl font-light">{uploading ? '...' : '+'}</span>
           </button>
-          <span className="text-xs mt-1.5 text-gray-500 w-16 text-center truncate">Add Story</span>
+          <span className="text-xs mt-1.5 text-neutral-600 w-16 text-center truncate">Your story</span>
           <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp,video/mp4"
             className="hidden" onChange={handleUpload} />
         </div>
@@ -214,17 +214,17 @@ export default function StoriesBar() {
         {groupedStories.map((group, gIdx) => (
           <div key={group.userId} onClick={() => openGroup(gIdx)}
             className="flex flex-col items-center flex-shrink-0 cursor-pointer">
-            <div className="w-16 h-16 rounded-full p-0.5 bg-gradient-to-tr from-purple-500 to-pink-500 overflow-hidden">
+            <div className="story-ring w-16 h-16 overflow-hidden">
               <div className="w-full h-full rounded-full overflow-hidden border-2 border-white bg-gray-100">
                 {resolveMediaUrl(group.stories[0]?.mediaUrl)?.match(/\.(mp4|webm)$/i)
                   ? <video src={resolveMediaUrl(group.stories[0].mediaUrl)} className="w-full h-full object-cover" muted />
                   : <img src={resolveMediaUrl(group.stories[0].mediaUrl)} alt={group.username} className="w-full h-full object-cover" />}
               </div>
             </div>
-            <span className="text-xs mt-1.5 text-gray-600 truncate w-16 text-center font-medium">{group.username}</span>
-            <span className="text-xs text-purple-400">{group.stories.length} {group.stories.length === 1 ? 'story' : 'stories'}</span>
+            <span className="text-xs mt-1.5 text-neutral-700 truncate w-16 text-center font-medium">{group.username}</span>
+            <span className="text-[11px] text-neutral-400">{group.stories.length} {group.stories.length === 1 ? 'story' : 'stories'}</span>
             {String(group.userId) === String(user.userId) && (
-              <span className="text-xs text-gray-400">👁 {group.stories.reduce((sum, s) => sum + (s.viewCount || 0), 0)}</span>
+              <span className="text-[11px] text-neutral-400">{group.stories.reduce((sum, s) => sum + (s.viewCount || 0), 0)} views</span>
             )}
           </div>
         ))}

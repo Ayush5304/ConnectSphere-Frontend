@@ -4,13 +4,13 @@ import { useAuth } from '../../context/AuthContext';
 import { Link, useNavigate } from 'react-router-dom';
 
 const REACTIONS = ['LIKE','LOVE','HAHA','WOW','SAD','ANGRY'];
-const EMOJI = { LIKE:'👍', LOVE:'❤️', HAHA:'😂', WOW:'😮', SAD:'😢', ANGRY:'😡' };
+const EMOJI = { LIKE:'Like', LOVE:'Love', HAHA:'Haha', WOW:'Wow', SAD:'Sad', ANGRY:'Angry' };
 const REACTION_COLOR = { LIKE:'text-blue-600', LOVE:'text-red-500', HAHA:'text-yellow-500', WOW:'text-yellow-500', SAD:'text-yellow-500', ANGRY:'text-orange-500' };
 
 const VIS = {
-  PUBLIC:    { icon: '🌍', label: 'Public' },
-  FOLLOWERS: { icon: '👥', label: 'Followers' },
-  PRIVATE:   { icon: '🔒', label: 'Only me' },
+  PUBLIC:    { icon: 'Public', label: 'Public' },
+  FOLLOWERS: { icon: 'Followers', label: 'Followers' },
+  PRIVATE:   { icon: 'Private', label: 'Only me' },
 };
 
 function renderContent(text, onHashtagClick) {
@@ -232,59 +232,59 @@ export default function PostCard({ post, onDelete }) {
   const postMediaUrl = resolveMediaUrl(post.mediaUrl);
 
   return (
-    <div className="card mb-3 overflow-hidden">
+    <article className="card cinema-card-hover mb-4 overflow-hidden">
       {/* Header */}
-      <div className="flex items-start gap-3 p-4 pb-3">
+      <div className="flex items-center gap-3 px-4 py-3">
         <Link to={`/profile/${post.userId}`} className="flex-shrink-0">
           <div className="avatar w-10 h-10 text-sm">
             {post.username?.[0]?.toUpperCase()}
           </div>
         </Link>
         <div className="flex-1 min-w-0">
-          <Link to={`/profile/${post.userId}`} className="font-semibold text-gray-900 hover:underline text-sm">
+          <Link to={`/profile/${post.userId}`} className="font-bold text-neutral-950 hover:underline text-sm">
             {post.username}
           </Link>
           <div className="flex items-center gap-1 mt-0.5">
-            <span className="text-xs text-gray-500">{timeAgo(post.createdAt)}</span>
-            <span className="text-gray-300">·</span>
-            <span className="text-xs text-gray-500" title={vis.label}>{vis.icon}</span>
+            <span className="text-xs text-neutral-500">{timeAgo(post.createdAt)}</span>
+            <span className="text-neutral-300">·</span>
+            <span className="text-xs text-neutral-500" title={vis.label}>{vis.icon}</span>
           </div>
         </div>
 
         {/* Options menu */}
         <div className="relative flex-shrink-0" ref={optionsRef}>
           <button onClick={() => setShowOptions(v => !v)}
-            className="w-8 h-8 rounded-full hover:bg-gray-100 flex items-center justify-center text-gray-500 text-lg font-bold">
+            className="w-8 h-8 rounded-full hover:bg-neutral-100 flex items-center justify-center text-neutral-600 text-lg font-bold">
             ···
           </button>
           {showOptions && (
-            <div className="absolute right-0 top-9 w-44 card z-20 shadow-xl py-1 overflow-hidden">
+            <div className="dropdown absolute right-0 top-9 w-44 z-20 py-1 overflow-hidden">
               {isOwner && (
                 <>
                   <button onClick={() => { setEditing(true); setShowOptions(false); }}
-                    className="flex items-center gap-2 w-full px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50">
-                    ✏️ Edit post
+                    className="flex items-center gap-2 w-full px-4 py-2.5 text-sm text-neutral-700 hover:bg-neutral-50">
+                    Edit post
                   </button>
                   <button onClick={() => { onDelete(post.postId); setShowOptions(false); }}
-                    className="flex items-center gap-2 w-full px-4 py-2.5 text-sm text-red-600 hover:bg-red-50">
-                    🗑️ Delete post
+                    className="flex items-center gap-2 w-full px-4 py-2.5 text-sm text-rose-600 hover:bg-rose-50">
+                    Delete post
                   </button>
                 </>
               )}
               {isAdmin && !isOwner && (
                 <button onClick={() => { onDelete(post.postId); setShowOptions(false); }}
-                  className="flex items-center gap-2 w-full px-4 py-2.5 text-sm text-red-600 hover:bg-red-50">
-                  🛡️ Remove post
+                  className="flex items-center gap-2 w-full px-4 py-2.5 text-sm text-rose-600 hover:bg-rose-50">
+                  Remove post
                 </button>
               )}
               {!isOwner && !isAdmin && !isGuest && !reported && (
                 <button onClick={() => { setShowReport(true); setShowOptions(false); }}
-                  className="flex items-center gap-2 w-full px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50">
-                  ⚑ Report post
+                  className="flex items-center gap-2 w-full px-4 py-2.5 text-sm text-neutral-700 hover:bg-neutral-50">
+                  Report post
                 </button>
               )}
               {reported && (
-                <div className="px-4 py-2.5 text-sm text-green-600">✓ Reported</div>
+                <div className="px-4 py-2.5 text-sm text-green-600">Reported</div>
               )}
             </div>
           )}
@@ -300,13 +300,13 @@ export default function PostCard({ post, onDelete }) {
             <div className="relative inline-block">
               <img src={resolveMediaUrl(editMediaPreview)} alt="media" className="rounded-lg max-h-40 object-cover" />
               <button onClick={() => { setEditMediaPreview(''); setEditMediaUrl(''); setEditMediaFile(null); }}
-                className="absolute top-1 right-1 bg-black bg-opacity-60 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs">×</button>
+                className="absolute top-1 right-1 bg-black/70 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs">x</button>
             </div>
           )}
           <div className="flex gap-2 flex-wrap">
             <button type="button" onClick={() => editFileRef.current.click()}
-              className="text-xs px-3 py-1.5 rounded-full bg-gray-100 text-gray-600 hover:bg-gray-200 font-medium">
-              📎 Change Photo
+              className="text-xs px-3 py-1.5 rounded-full bg-neutral-100 text-neutral-700 hover:bg-neutral-200 font-bold">
+              Change media
             </button>
             <input ref={editFileRef} type="file" accept="image/jpeg,image/png,image/webp,video/mp4" className="hidden"
               onChange={e => { const f = e.target.files[0]; if (!f) return; setEditMediaFile(f); setEditMediaPreview(URL.createObjectURL(f)); }} />
@@ -318,7 +318,7 @@ export default function PostCard({ post, onDelete }) {
       ) : (
         post.content && (
           <div className="px-4 pb-3">
-            <p className="text-gray-800 text-sm leading-relaxed">{renderContent(post.content, openHashtag)}</p>
+            <p className="text-neutral-900 text-sm leading-relaxed">{renderContent(post.content, openHashtag)}</p>
           </div>
         )
       )}
@@ -327,26 +327,26 @@ export default function PostCard({ post, onDelete }) {
       {!editing && postMediaUrl && (
         <div className="w-full bg-black">
           {postMediaUrl.match(/\.(mp4|webm|ogg)$/i)
-            ? <video src={postMediaUrl} className="w-full max-h-96 object-contain" controls />
-            : <img src={postMediaUrl} alt="post" className="w-full max-h-96 object-contain" />}
+            ? <video src={postMediaUrl} className="w-full max-h-[680px] object-contain" controls />
+            : <img src={postMediaUrl} alt="post" className="w-full max-h-[680px] object-contain" />}
         </div>
       )}
 
       {/* Reaction summary + counts */}
       {(likesCount > 0 || commentsCount > 0) && (
-        <div className="flex items-center justify-between px-4 py-2 border-b border-gray-100">
+        <div className="flex items-center justify-between px-4 py-2 border-b border-neutral-100">
           <div className="flex items-center gap-1">
             {Object.keys(reactionSummary).length > 0 && (
               <div className="flex -space-x-1">
                 {Object.keys(reactionSummary).slice(0, 3).map(type => (
-                  <span key={type} className="text-sm">{EMOJI[type]}</span>
+                  <span key={type} className="text-xs font-bold text-neutral-600">{EMOJI[type]}</span>
                 ))}
               </div>
             )}
-            {likesCount > 0 && <span className="text-xs text-gray-500 ml-1">{likesCount}</span>}
+            {likesCount > 0 && <span className="text-xs text-neutral-500 ml-1">{likesCount}</span>}
           </div>
           {commentsCount > 0 && (
-            <button onClick={loadComments} className="text-xs text-gray-500 hover:underline">
+            <button onClick={loadComments} className="text-xs text-neutral-500 hover:underline">
               {commentsCount} comment{commentsCount !== 1 ? 's' : ''}
             </button>
           )}
@@ -354,7 +354,7 @@ export default function PostCard({ post, onDelete }) {
       )}
 
       {/* Action buttons */}
-      <div className="flex items-center px-2 py-1 border-b border-gray-100">
+      <div className="flex items-center px-2 py-1 border-b border-neutral-100">
         {/* Like */}
         <div className="relative flex-1">
           <button
@@ -362,16 +362,16 @@ export default function PostCard({ post, onDelete }) {
             onMouseLeave={() => setShowReactions(false)}
             onClick={() => isGuest ? navigate('/login') : (userReaction ? handleUnreact() : handleReact('LIKE'))}
             className={`post-action w-full ${userReaction ? REACTION_COLOR[userReaction] + ' font-semibold' : ''}`}>
-            {userReaction ? EMOJI[userReaction] : '👍'}
+            {userReaction ? EMOJI[userReaction] : 'Like'}
             <span className="hidden sm:inline">{userReaction ? userReaction.charAt(0) + userReaction.slice(1).toLowerCase() : 'Like'}</span>
           </button>
           {showReactions && !isGuest && (
-            <div className="absolute bottom-10 left-0 bg-white shadow-2xl rounded-full flex gap-1 px-3 py-2 z-20 border border-gray-200"
+            <div className="dropdown absolute bottom-10 left-0 flex gap-1 px-2 py-2 z-20"
               onMouseEnter={() => setShowReactions(true)}
               onMouseLeave={() => setShowReactions(false)}>
               {REACTIONS.map(r => (
                 <button key={r} onClick={() => handleReact(r)}
-                  className="text-2xl hover:scale-125 p-1 transition-transform" title={r}>
+                  className="text-xs font-bold hover:bg-neutral-100 rounded-full px-3 py-1.5 transition-colors" title={r}>
                   {EMOJI[r]}
                 </button>
               ))}
@@ -381,7 +381,7 @@ export default function PostCard({ post, onDelete }) {
 
         {/* Comment */}
         <button onClick={loadComments} className="post-action flex-1">
-          💬 <span className="hidden sm:inline">Comment</span>
+          Comment
         </button>
       </div>
 
@@ -558,6 +558,6 @@ export default function PostCard({ post, onDelete }) {
           </div>
         </div>
       )}
-    </div>
+    </article>
   );
 }
