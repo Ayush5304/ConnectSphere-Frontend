@@ -22,6 +22,7 @@
  */
 
 import React, { createContext, useContext, useState } from 'react';
+import { resolveMediaUrl } from '../api';
 
 /*
  * createContext(null) — Creates the global "box" to store auth data
@@ -39,6 +40,14 @@ const AuthContext = createContext(null);
  *   </AuthProvider>
  */
 export function AuthProvider({ children }) {
+  const normalizeUserMedia = (data) => {
+    if (!data || typeof data !== 'object') return data;
+    return {
+      ...data,
+      profilePicture: resolveMediaUrl(data.profilePicture || ''),
+      coverPicture: resolveMediaUrl(data.coverPicture || '')
+    };
+  };
 
   /*
    * useState with a function (lazy initialization):
@@ -49,7 +58,7 @@ export function AuthProvider({ children }) {
    */
   const [user, setUser] = useState(() => {
     const stored = localStorage.getItem('user');
-    return stored ? JSON.parse(stored) : null;
+    return stored ? normalizeUserMedia(JSON.parse(stored)) : null;
   });
 
   /*
@@ -64,9 +73,10 @@ export function AuthProvider({ children }) {
    *                    bio, profilePicture
    */
   const login = (userData) => {
-    localStorage.setItem('token', userData.token);
-    localStorage.setItem('user', JSON.stringify(userData));
-    setUser(userData);
+    const normalized = normalizeUserMedia(userData);
+    localStorage.setItem('token', normalized.token);
+    localStorage.setItem('user', JSON.stringify(normalized));
+    setUser(normalized);
   };
 
   /*

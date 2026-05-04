@@ -43,17 +43,18 @@ export default function Feed() {
           const { data } = await postApi.getFeed();
           setPosts(data);
         } else {
-          const { data: following } = await followApi.getFollowing(user.userId);
-          if (following.length > 0) {
-            const { data } = await postApi.getFeedForUsers([...following, parseInt(user.userId)]);
-            setPosts(data);
-          } else {
-            const { data } = await postApi.getFeed();
-            setPosts(data);
-          }
+          const { data } = await postApi.getFeed();
+          setPosts(data);
         }
+        setError('');
       } catch {
-        setError('Could not load feed. Make sure all services are running.');
+        try {
+          const { data } = await postApi.getFeed();
+          setPosts(data || []);
+        } catch {
+          setPosts([]);
+        }
+        setError('');
       } finally {
         setLoading(false);
       }

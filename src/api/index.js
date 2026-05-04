@@ -32,9 +32,16 @@ const GATEWAY_ORIGIN = API_BASE_URL.replace(/\/api\/?$/, '');
 export const resolveMediaUrl = (url) => {
   if (!url || typeof url !== 'string') return '';
   if (url.startsWith('/api/')) return `${GATEWAY_ORIGIN}${url}`;
-  if (url.startsWith('/media/')) return `${GATEWAY_ORIGIN}/api${url}`;
+  if (url.startsWith('/media/files/')) return `${GATEWAY_ORIGIN}${url}`;
+  if (url.startsWith('/media/')) return `${GATEWAY_ORIGIN}${url}`;
   if (url.startsWith('http://localhost:8080/media/')) {
-    return url.replace('http://localhost:8080/media/', 'http://localhost:8080/api/media/');
+    return `${GATEWAY_ORIGIN}${url.replace('http://localhost:8080', '')}`;
+  }
+  if (url.startsWith('http://localhost:8080/api/media/')) {
+    return `${GATEWAY_ORIGIN}${url.replace('http://localhost:8080', '')}`;
+  }
+  if (url.startsWith('http://localhost:8087/media/files/')) {
+    return `${GATEWAY_ORIGIN}${url.replace('http://localhost:8087', '')}`;
   }
   return url;
 };
@@ -93,6 +100,10 @@ export const authApi = {
 
   /* Login — sends email and password, gets back JWT token + user info */
   login:          (data)              => axios.post(`${API}/auth/login`, data),
+  requestLoginOtp:(email)             => axios.post(`${API}/auth/otp/login/request`, { email }),
+  verifyLoginOtp: (email, otp)        => axios.post(`${API}/auth/otp/login/verify`, { email, otp }),
+  requestRegisterOtp:(data)           => axios.post(`${API}/auth/otp/register/request`, data),
+  verifyRegisterOtp:(email, otp)      => axios.post(`${API}/auth/otp/register/verify`, { email, otp }),
 
   /* Get logged-in user's profile — needs token */
   getProfile:     ()                  => axios.get(`${API}/auth/profile`, authHeader()),

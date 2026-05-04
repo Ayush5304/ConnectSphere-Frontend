@@ -117,7 +117,17 @@ export default function AdminDashboard() {
 
   return (
     <div className="max-w-5xl mx-auto py-6 px-4">
-      <h2 className="text-2xl font-bold text-gray-800 mb-6">🛡️ Admin Dashboard</h2>
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
+        <h2 className="text-2xl font-bold text-gray-800">Admin Dashboard</h2>
+        <a
+          href="http://localhost:8090"
+          target="_blank"
+          rel="noreferrer"
+          className="px-4 py-2 rounded-lg text-sm font-semibold bg-emerald-600 text-white hover:bg-emerald-700 transition-colors"
+        >
+          Open Admin Server
+        </a>
+      </div>
 
       <div className="flex gap-2 mb-6 flex-wrap">
         {TABS.map(t => (

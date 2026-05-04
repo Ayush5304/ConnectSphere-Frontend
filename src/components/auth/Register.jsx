@@ -8,6 +8,8 @@ export default function Register() {
   const [error, setError]     = useState('');
   const [loading, setLoading] = useState(false);
   const [showPass, setShowPass] = useState(false);
+  const [otpStep, setOtpStep] = useState(false);
+  const [otp, setOtp] = useState('');
   const navigate = useNavigate();
   const { login } = useAuth();
 
@@ -24,12 +26,24 @@ export default function Register() {
     if (form.password.length < 6) { setError('Password must be at least 6 characters.'); return; }
     setError(''); setLoading(true);
     try {
-      await authApi.register(form);
-      const { data } = await authApi.login({ email: form.email, password: form.password });
-      login(data); navigate('/');
+      await authApi.requestRegisterOtp(form);
+      setOtpStep(true);
     } catch (err) {
       const msg = err.response?.data;
       setError(typeof msg === 'string' ? msg : msg?.message || msg?.error || 'Registration failed.');
+    } finally { setLoading(false); }
+  };
+
+  const handleVerifyOtp = async (e) => {
+    e.preventDefault();
+    setError(''); setLoading(true);
+    try {
+      const { data } = await authApi.verifyRegisterOtp(form.email, otp);
+      login(data);
+      navigate('/');
+    } catch (err) {
+      const msg = err.response?.data;
+      setError(typeof msg === 'string' ? msg : msg?.message || msg?.error || 'OTP verification failed.');
     } finally { setLoading(false); }
   };
 
@@ -71,6 +85,7 @@ export default function Register() {
               </div>
             )}
 
+            {!otpStep ? (
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">Full Name</label>
@@ -111,9 +126,26 @@ export default function Register() {
                 )}
               </div>
               <button className="btn-primary w-full py-2.5 mt-1" type="submit" disabled={loading}>
-                {loading ? 'Creating account…' : 'Create Account'}
+                {loading ? 'Sending OTP…' : 'Send Signup OTP'}
               </button>
             </form>
+            ) : (
+              <form onSubmit={handleVerifyOtp} className="space-y-4">
+                <div className="bg-emerald-50 border border-emerald-200 text-emerald-700 text-sm px-3 py-2 rounded-lg">
+                  OTP sent to <strong>{form.email}</strong>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">Enter OTP</label>
+                  <input className="input-field" type="text" placeholder="6-digit OTP" value={otp} onChange={(e) => setOtp(e.target.value)} maxLength={6} required />
+                </div>
+                <button className="btn-primary w-full py-2.5 mt-1" type="submit" disabled={loading}>
+                  {loading ? 'Verifying…' : 'Verify OTP & Create Account'}
+                </button>
+                <button type="button" className="btn-ghost w-full py-2.5" onClick={handleSubmit} disabled={loading}>
+                  Resend OTP
+                </button>
+              </form>
+            )}
 
             <div className="flex items-center gap-3 my-5">
               <div className="flex-1 h-px bg-slate-200" />

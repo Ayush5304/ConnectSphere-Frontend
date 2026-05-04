@@ -8,6 +8,9 @@ export default function Login() {
   const [error, setError]     = useState('');
   const [loading, setLoading] = useState(false);
   const [showPass, setShowPass] = useState(false);
+  const [otpMode, setOtpMode] = useState(false);
+  const [otpSent, setOtpSent] = useState(false);
+  const [otp, setOtp] = useState('');
   const { login } = useAuth();
   const navigate  = useNavigate();
 
@@ -34,20 +37,46 @@ export default function Login() {
     finally { setLoading(false); }
   };
 
+  const handleRequestOtp = async () => {
+    if (!form.email) { setError('Please enter email first.'); return; }
+    setLoading(true); setError('');
+    try {
+      await authApi.requestLoginOtp(form.email);
+      setOtpSent(true);
+    } catch (err) {
+      const msg = err.response?.data;
+      setError(typeof msg === 'string' ? msg : msg?.message || 'Unable to send OTP.');
+    } finally { setLoading(false); }
+  };
+
+  const handleVerifyOtp = async (e) => {
+    e.preventDefault();
+    setLoading(true); setError('');
+    try {
+      const { data } = await authApi.verifyLoginOtp(form.email, otp);
+      login(data);
+      navigate('/');
+    } catch (err) {
+      const msg = err.response?.data;
+      setError(typeof msg === 'string' ? msg : msg?.message || 'Invalid OTP.');
+    } finally { setLoading(false); }
+  };
+
   return (
     <div className="min-h-screen flex bg-transparent">
 
       {/* Left panel */}
-      <div className="hidden lg:flex lg:w-5/12 bg-gradient-to-br from-slate-900 via-blue-900 to-sky-700 flex-col items-center justify-center p-12 text-white relative overflow-hidden">
-        <div className="absolute inset-0 opacity-20" style={{ backgroundImage: 'radial-gradient(circle at 20% 50%, white 1px, transparent 1px), radial-gradient(circle at 80% 20%, white 1px, transparent 1px)', backgroundSize: '56px 56px' }} />
-        <div className="relative z-10 text-center max-w-xs">
-          <div className="w-16 h-16 bg-white/20 rounded-2xl flex items-center justify-center font-black text-3xl mx-auto mb-6 backdrop-blur-sm">C</div>
-          <h1 className="text-4xl font-black mb-3 tracking-tight">ConnectSphere</h1>
-          <p className="text-slate-200 text-base mb-10 leading-relaxed">Share moments, connect with people, discover what's trending.</p>
+      <div className="hidden lg:flex lg:w-6/12 bg-gradient-to-br from-[#10233f] via-[#1b3f63] to-[#2e7a70] flex-col items-center justify-center p-14 text-white relative overflow-hidden">
+        <div className="absolute inset-0 opacity-30" style={{ backgroundImage: 'radial-gradient(circle at 20% 50%, rgba(255,255,255,0.55) 1px, transparent 1px), radial-gradient(circle at 80% 20%, rgba(255,255,255,0.45) 1px, transparent 1px)', backgroundSize: '54px 54px' }} />
+        <div className="relative z-10 text-center max-w-md">
+          <div className="w-16 h-16 bg-white/15 rounded-2xl flex items-center justify-center font-black text-3xl mx-auto mb-8 backdrop-blur-sm border border-white/20">C</div>
+          <h1 className="text-5xl font-black mb-4 tracking-tight">ConnectSphere</h1>
+          <p className="text-slate-100 text-2xl mb-2 leading-relaxed">Connect. Share. Discover.</p>
+          <p className="text-slate-200/90 text-base mb-10 leading-relaxed">A cleaner social space for stories, posts and meaningful interactions.</p>
           <div className="space-y-3 text-left">
             {['React & Like posts', 'Comment & Reply', 'Real-time Notifications', 'Trending Hashtags', 'Follow Network'].map(f => (
-              <div key={f} className="flex items-center gap-3 bg-white/10 rounded-xl px-4 py-2.5 text-sm font-medium backdrop-blur-sm">
-                <span className="w-1.5 h-1.5 rounded-full bg-sky-300" />
+              <div key={f} className="flex items-center gap-3 bg-white/10 rounded-lg px-4 py-2.5 text-sm font-medium backdrop-blur-sm border border-white/10">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-300" />
                 {f}
               </div>
             ))}
@@ -56,18 +85,18 @@ export default function Login() {
       </div>
 
       {/* Right panel */}
-      <div className="flex-1 flex items-center justify-center p-6">
-        <div className="w-full max-w-sm">
+      <div className="flex-1 flex items-center justify-center p-8">
+        <div className="w-full max-w-[460px]">
 
           {/* Mobile logo */}
           <div className="lg:hidden text-center mb-8">
-            <div className="w-12 h-12 rounded-2xl bg-blue-600 flex items-center justify-center text-white font-black text-xl mx-auto mb-3">C</div>
+            <div className="w-12 h-12 rounded-2xl bg-teal-700 flex items-center justify-center text-white font-black text-xl mx-auto mb-3">C</div>
             <span className="font-black text-2xl text-slate-800 tracking-tight">ConnectSphere</span>
           </div>
 
-          <div className="card p-8">
-            <h2 className="text-2xl font-bold text-slate-900 mb-1 tracking-tight">Welcome back</h2>
-            <p className="text-slate-400 text-sm mb-6">Sign in to your account</p>
+          <div className="card p-10">
+            <h2 className="text-[2rem] font-bold text-slate-900 mb-1 tracking-tight">Welcome back</h2>
+            <p className="text-slate-500 text-base mb-7">Sign in to your account</p>
 
             {error && (
               <div className="bg-red-50 border border-red-200 text-red-600 text-sm px-4 py-3 rounded-lg mb-5 flex items-center gap-2">
@@ -76,13 +105,24 @@ export default function Login() {
               </div>
             )}
 
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="flex items-center gap-2 mb-4 text-xs">
+              <button type="button" onClick={() => { setOtpMode(false); setError(''); }}
+                className={`px-3 py-1.5 rounded-full border ${!otpMode ? 'bg-slate-900 text-white border-slate-900' : 'text-slate-600 border-slate-200'}`}>
+                Password
+              </button>
+              <button type="button" onClick={() => { setOtpMode(true); setError(''); }}
+                className={`px-3 py-1.5 rounded-full border ${otpMode ? 'bg-slate-900 text-white border-slate-900' : 'text-slate-600 border-slate-200'}`}>
+                Email OTP
+              </button>
+            </div>
+
+            <form onSubmit={otpMode ? handleVerifyOtp : handleSubmit} className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">Email</label>
                 <input className="input-field" type="email" placeholder="you@example.com"
                   value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} required />
               </div>
-              <div>
+              {!otpMode && <div>
                 <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">Password</label>
                 <div className="relative">
                   <input className="input-field pr-10" type={showPass ? 'text' : 'password'} placeholder="••••••••"
@@ -95,11 +135,24 @@ export default function Login() {
                   </button>
                 </div>
                 <div className="text-right mt-1.5">
-                  <Link to="/forgot-password" className="text-xs text-blue-600 hover:text-blue-800 font-semibold">Forgot password?</Link>
+                  <Link to="/forgot-password" className="text-xs text-teal-700 hover:text-teal-900 font-semibold">Forgot password?</Link>
                 </div>
-              </div>
-              <button className="btn-primary w-full py-2.5 mt-1" type="submit" disabled={loading}>
-                {loading ? 'Signing in…' : 'Sign In'}
+              </div>}
+
+              {otpMode && (
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">OTP</label>
+                  <div className="flex gap-2">
+                    <input className="input-field" type="text" placeholder="6-digit OTP" value={otp} onChange={(e) => setOtp(e.target.value)} maxLength={6} />
+                    <button type="button" className="btn-ghost px-3 whitespace-nowrap" onClick={handleRequestOtp} disabled={loading}>
+                      {otpSent ? 'Resend' : 'Send OTP'}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              <button className="btn-primary w-full py-3 mt-1 text-base" type="submit" disabled={loading}>
+                {loading ? 'Signing in…' : (otpMode ? 'Verify OTP & Sign In' : 'Sign In')}
               </button>
             </form>
 
@@ -124,7 +177,7 @@ export default function Login() {
 
             <p className="text-center text-sm mt-6 text-slate-500">
               Don't have an account?{' '}
-              <Link to="/register" className="text-blue-600 font-semibold hover:text-blue-800">Sign up free</Link>
+              <Link to="/register" className="text-teal-700 font-semibold hover:text-teal-900">Sign up free</Link>
             </p>
           </div>
         </div>
