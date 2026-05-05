@@ -16,6 +16,7 @@ export default function StoriesBar() {
   const [viewers, setViewers]             = useState([]);
   const [showViewers, setShowViewers]     = useState(false);
   const [loadingViewers, setLoadingViewers] = useState(false);
+  const [failedMedia, setFailedMedia] = useState({});
   const fileRef   = useRef();
   const timerRef  = useRef(null);
   const startRef  = useRef(null);
@@ -158,7 +159,7 @@ export default function StoriesBar() {
       formData.append('userId', user.userId);
       formData.append('username', user.username);
       const { data } = await mediaApi.createStory(formData);
-      const updated = [data, ...stories];
+      const updated = [{ ...data, mediaUrl: resolveMediaUrl(data.mediaUrl) }, ...stories];
       setStories(updated);
       groupStories(updated);
     } catch (err) {
@@ -193,6 +194,8 @@ export default function StoriesBar() {
 
   const currentGroup   = viewingGroup !== null ? groupedStories[viewingGroup] : null;
   const currentStory   = currentGroup?.stories[currentIdx];
+  const currentStoryUrl = resolveMediaUrl(currentStory?.mediaUrl);
+  const currentStoryFailed = currentStory && failedMedia[currentStory.storyId];
   const isOwner        = currentStory && String(currentStory.userId) === String(user.userId);
 
   return (
@@ -269,10 +272,18 @@ export default function StoriesBar() {
 
             {/* Media */}
             <div className="flex-1 flex items-center justify-center bg-black">
-              {resolveMediaUrl(currentStory.mediaUrl)?.match(/\.(mp4|webm)$/i)
-                ? <video key={currentStory.storyId} src={resolveMediaUrl(currentStory.mediaUrl)} autoPlay muted
+              {currentStoryFailed ? (
+                <div className="px-8 text-center text-white">
+                  <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-white/10 text-3xl">!</div>
+                  <p className="text-lg font-bold">Story media is unavailable</p>
+                  <p className="mt-2 text-sm text-white/60 break-all">{currentStoryUrl || 'Missing media URL'}</p>
+                </div>
+              ) : currentStoryUrl?.match(/\.(mp4|webm|ogg)$/i)
+                ? <video key={currentStory.storyId} src={currentStoryUrl} autoPlay muted controls
+                    onError={() => setFailedMedia(prev => ({ ...prev, [currentStory.storyId]: true }))}
                     className="w-full h-full object-contain max-h-screen" />
-                : <img key={currentStory.storyId} src={resolveMediaUrl(currentStory.mediaUrl)} alt="story"
+                : <img key={currentStory.storyId} src={currentStoryUrl} alt="story"
+                    onError={() => setFailedMedia(prev => ({ ...prev, [currentStory.storyId]: true }))}
                     className="w-full h-full object-contain max-h-screen" />}
             </div>
 

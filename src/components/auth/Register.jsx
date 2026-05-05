@@ -91,7 +91,7 @@ export default function Register() {
             <span>sphere.</span>
           </h1>
           <p className="cinematic-subtitle">
-            A sleek, animated space for posts, stories, reactions, follows, and conversations. Minimal like Instagram, deep like cinema.
+            Build your corner of the sphere with bold moments, honest captions, and conversations that keep unfolding.
           </p>
           <div className="cinematic-reel">
             {reelCards.map(card => (

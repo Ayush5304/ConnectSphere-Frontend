@@ -93,3 +93,210 @@ webpack compiled [1m[32msuccessfully[39m[22m
 Compiling...
 Compiled successfully!
 webpack compiled [1m[32msuccessfully[39m[22m
+Compiling...
+Compiled successfully!
+webpack compiled [1m[32msuccessfully[39m[22m
+Compiling...
+Compiled successfully!
+webpack compiled [1m[32msuccessfully[39m[22m
+Compiling...
+Compiled successfully!
+webpack compiled [1m[32msuccessfully[39m[22m
+Compiling...
+Compiled successfully!
+webpack compiled [1m[32msuccessfully[39m[22m
+Compiling...
+Compiled successfully!
+webpack compiled [1m[32msuccessfully[39m[22m
+Compiling...
+Compiled successfully!
+webpack compiled [1m[32msuccessfully[39m[22m
+Compiling...
+Compiled successfully!
+webpack compiled [1m[32msuccessfully[39m[22m
+Compiling...
+Compiled successfully!
+webpack compiled [1m[32msuccessfully[39m[22m
+Compiling...
+Failed to compile.
+
+[eslint] 
+src\components\feed\PostCard.jsx
+Syntax error: Expected corresponding JSX closing tag for <article>. (561:4) (561:4)
+[1m[31mERROR[39m[22m in [1m./src/components/feed/PostCard.jsx[39m[22m
+Module build failed (from ./node_modules/babel-loader/lib/index.js):
+SyntaxError: C:\Users\Ayush Mishra\Desktop\ConnectSphere-Frontend\src\components\feed\PostCard.jsx: Expected corresponding JSX closing tag for <article>. (561:4)
+
+[0m [90m 559 |[39m         [33m<[39m[33m/[39m[33mdiv[39m[33m>[39m
+ [90m 560 |[39m       )}
+[31m[1m>[22m[39m[90m 561 |[39m     [33m<[39m[33m/[39m[33mdiv[39m[33m>[39m
+ [90m     |[39m     [31m[1m^[22m[39m
+ [90m 562 |[39m   )[33m;[39m
+ [90m 563 |[39m }
+ [90m 564 |[39m[0m
+    at constructor (C:\Users\Ayush Mishra\Desktop\ConnectSphere-Frontend\node_modules\@babel\parser\lib\index.js:365:19)
+    at FlowParserMixin.raise (C:\Users\Ayush Mishra\Desktop\ConnectSphere-Frontend\node_modules\@babel\parser\lib\index.js:6599:19)
+    at FlowParserMixin.jsxParseElementAt (C:\Users\Ayush Mishra\Desktop\ConnectSphere-Frontend\node_modules\@babel\parser\lib\index.js:4727:16)
+    at FlowParserMixin.jsxParseElement (C:\Users\Ayush Mishra\Desktop\ConnectSphere-Frontend\node_modules\@babel\parser\lib\index.js:4749:17)
+    at FlowParserMixin.parseExprAtom (C:\Users\Ayush Mishra\Desktop\ConnectSphere-Frontend\node_modules\@babel\parser\lib\index.js:4759:19)
+    at FlowParserMixin.parseExprSubscripts (C:\Users\Ayush Mishra\Desktop\ConnectSphere-Frontend\node_modules\@babel\parser\lib\index.js:11081:23)
+    at FlowParserMixin.parseUpdate (C:\Users\Ayush Mishra\Desktop\ConnectSphere-Frontend\node_modules\@babel\parser\lib\index.js:11066:21)
+    at FlowParserMixin.parseMaybeUnary (C:\Users\Ayush Mishra\Desktop\ConnectSphere-Frontend\node_modules\@babel\parser\lib\index.js:11046:23)
+    at FlowParserMixin.parseMaybeUnaryOrPrivate (C:\Users\Ayush Mishra\Desktop\ConnectSphere-Frontend\node_modules\@babel\parser\lib\index.js:10899:61)
+    at FlowParserMixin.parseExprOps (C:\Users\Ayush Mishra\Desktop\ConnectSphere-Frontend\node_modules\@babel\parser\lib\index.js:10904:23)
+    at FlowParserMixin.parseMaybeConditional (C:\Users\Ayush Mishra\Desktop\ConnectSphere-Frontend\node_modules\@babel\parser\lib\index.js:10881:23)
+    at FlowParserMixin.parseMaybeAssign (C:\Users\Ayush Mishra\Desktop\ConnectSphere-Frontend\node_modules\@babel\parser\lib\index.js:10831:21)
+    at C:\Users\Ayush Mishra\Desktop\ConnectSphere-Frontend\node_modules\@babel\parser\lib\index.js:3498:39
+    at FlowParserMixin.tryParse (C:\Users\Ayush Mishra\Desktop\ConnectSphere-Frontend\node_modules\@babel\parser\lib\index.js:6907:20)
+    at FlowParserMixin.parseMaybeAssign (C:\Users\Ayush Mishra\Desktop\ConnectSphere-Frontend\node_modules\@babel\parser\lib\index.js:3498:18)
+    at C:\Users\Ayush Mishra\Desktop\ConnectSphere-Frontend\node_modules\@babel\parser\lib\index.js:10800:39
+    at FlowParserMixin.allowInAnd (C:\Users\Ayush Mishra\Desktop\ConnectSphere-Frontend\node_modules\@babel\parser\lib\index.js:12426:12)
+    at FlowParserMixin.parseMaybeAssignAllowIn (C:\Users\Ayush Mishra\Desktop\ConnectSphere-Frontend\node_modules\@babel\parser\lib\index.js:10800:17)
+    at FlowParserMixin.parseMaybeAssignAllowInOrVoidPattern (C:\Users\Ayush Mishra\Desktop\ConnectSphere-Frontend\node_modules\@babel\parser\lib\index.js:12493:17)
+    at FlowParserMixin.parseParenAndDistinguishExpression (C:\Users\Ayush Mishra\Desktop\ConnectSphere-Frontend\node_modules\@babel\parser\lib\index.js:11675:28)
+    at FlowParserMixin.parseParenAndDistinguishExpression (C:\Users\Ayush Mishra\Desktop\ConnectSphere-Frontend\node_modules\@babel\parser\lib\index.js:3591:18)
+    at FlowParserMixin.parseExprAtom (C:\Users\Ayush Mishra\Desktop\ConnectSphere-Frontend\node_modules\@babel\parser\lib\index.js:11331:23)
+    at FlowParserMixin.parseExprAtom (C:\Users\Ayush Mishra\Desktop\ConnectSphere-Frontend\node_modules\@babel\parser\lib\index.js:4764:20)
+    at FlowParserMixin.parseExprSubscripts (C:\Users\Ayush Mishra\Desktop\ConnectSphere-Frontend\node_modules\@babel\parser\lib\index.js:11081:23)
+    at FlowParserMixin.parseUpdate (C:\Users\Ayush Mishra\Desktop\ConnectSphere-Frontend\node_modules\@babel\parser\lib\index.js:11066:21)
+    at FlowParserMixin.parseMaybeUnary (C:\Users\Ayush Mishra\Desktop\ConnectSphere-Frontend\node_modules\@babel\parser\lib\index.js:11046:23)
+    at FlowParserMixin.parseMaybeUnaryOrPrivate (C:\Users\Ayush Mishra\Desktop\ConnectSphere-Frontend\node_modules\@babel\parser\lib\index.js:10899:61)
+    at FlowParserMixin.parseExprOps (C:\Users\Ayush Mishra\Desktop\ConnectSphere-Frontend\node_modules\@babel\parser\lib\index.js:10904:23)
+    at FlowParserMixin.parseMaybeConditional (C:\Users\Ayush Mishra\Desktop\ConnectSphere-Frontend\node_modules\@babel\parser\lib\index.js:10881:23)
+    at FlowParserMixin.parseMaybeAssign (C:\Users\Ayush Mishra\Desktop\ConnectSphere-Frontend\node_modules\@babel\parser\lib\index.js:10831:21)
+    at FlowParserMixin.parseMaybeAssign (C:\Users\Ayush Mishra\Desktop\ConnectSphere-Frontend\node_modules\@babel\parser\lib\index.js:3549:18)
+    at FlowParserMixin.parseExpressionBase (C:\Users\Ayush Mishra\Desktop\ConnectSphere-Frontend\node_modules\@babel\parser\lib\index.js:10784:23)
+    at C:\Users\Ayush Mishra\Desktop\ConnectSphere-Frontend\node_modules\@babel\parser\lib\index.js:10780:39
+    at FlowParserMixin.allowInAnd (C:\Users\Ayush Mishra\Desktop\ConnectSphere-Frontend\node_modules\@babel\parser\lib\index.js:12421:16)
+    at FlowParserMixin.parseExpression (C:\Users\Ayush Mishra\Desktop\ConnectSphere-Frontend\node_modules\@babel\parser\lib\index.js:10780:17)
+    at FlowParserMixin.parseReturnStatement (C:\Users\Ayush Mishra\Desktop\ConnectSphere-Frontend\node_modules\@babel\parser\lib\index.js:13142:28)
+    at FlowParserMixin.parseStatementContent (C:\Users\Ayush Mishra\Desktop\ConnectSphere-Frontend\node_modules\@babel\parser\lib\index.js:12798:21)
+    at FlowParserMixin.parseStatementLike (C:\Users\Ayush Mishra\Desktop\ConnectSphere-Frontend\node_modules\@babel\parser\lib\index.js:12767:17)
+    at FlowParserMixin.parseStatementLike (C:\Users\Ayush Mishra\Desktop\ConnectSphere-Frontend\node_modules\@babel\parser\lib\index.js:2918:24)
+    at FlowParserMixin.parseStatementListItem (C:\Users\Ayush Mishra\Desktop\ConnectSphere-Frontend\node_modules\@babel\parser\lib\index.js:12747:17)
+    at FlowParserMixin.parseBlockOrModuleBlockBody (C:\Users\Ayush Mishra\Desktop\ConnectSphere-Frontend\node_modules\@babel\parser\lib\index.js:13316:61)
+    at FlowParserMixin.parseBlockBody (C:\Users\Ayush Mishra\Desktop\ConnectSphere-Frontend\node_modules\@babel\parser\lib\index.js:13309:10)
+    at FlowParserMixin.parseBlock (C:\Users\Ayush Mishra\Desktop\ConnectSphere-Frontend\node_modules\@babel\parser\lib\index.js:13297:10)
+    at FlowParserMixin.parseFunctionBody (C:\Users\Ayush Mishra\Desktop\ConnectSphere-Frontend\node_modules\@babel\parser\lib\index.js:12100:24)
+    at FlowParserMixin.parseFunctionBody (C:\Users\Ayush Mishra\Desktop\ConnectSphere-Frontend\node_modules\@babel\parser\lib\index.js:2895:11)
+    at FlowParserMixin.parseFunctionBodyAndFinish (C:\Users\Ayush Mishra\Desktop\ConnectSphere-Frontend\node_modules\@babel\parser\lib\index.js:12086:10)
+    at FlowParserMixin.parseFunctionBodyAndFinish (C:\Users\Ayush Mishra\Desktop\ConnectSphere-Frontend\node_modules\@babel\parser\lib\index.js:2903:18)
+    at C:\Users\Ayush Mishra\Desktop\ConnectSphere-Frontend\node_modules\@babel\parser\lib\index.js:13445:12
+    at FlowParserMixin.withSmartMixTopicForbiddingContext (C:\Users\Ayush Mishra\Desktop\ConnectSphere-Frontend\node_modules\@babel\parser\lib\index.js:12403:14)
+    at FlowParserMixin.parseFunction (C:\Users\Ayush Mishra\Desktop\ConnectSphere-Frontend\node_modules\@babel\parser\lib\index.js:13444:10)
+
+[1m[31mERROR[39m[22m in [1m[eslint] 
+src\components\feed\PostCard.jsx
+  Line 561:4:  Parsing [1m[31merror[39m[22m[1m: Expected corresponding JSX closing tag for <article>. (561:4)
+
+[39m[22m
+
+webpack compiled with [1m[31m2 errors[39m[22m
+Compiling...
+Failed to compile.
+
+[eslint] 
+src\components\feed\PostCard.jsx
+Syntax error: Expected corresponding JSX closing tag for <article>. (561:4) (561:4)
+[1m[31mERROR[39m[22m in [1m./src/components/feed/PostCard.jsx[39m[22m
+Module build failed (from ./node_modules/babel-loader/lib/index.js):
+SyntaxError: C:\Users\Ayush Mishra\Desktop\ConnectSphere-Frontend\src\components\feed\PostCard.jsx: Expected corresponding JSX closing tag for <article>. (561:4)
+
+[0m [90m 559 |[39m         [33m<[39m[33m/[39m[33mdiv[39m[33m>[39m
+ [90m 560 |[39m       )}
+[31m[1m>[22m[39m[90m 561 |[39m     [33m<[39m[33m/[39m[33mdiv[39m[33m>[39m
+ [90m     |[39m     [31m[1m^[22m[39m
+ [90m 562 |[39m   )[33m;[39m
+ [90m 563 |[39m }
+ [90m 564 |[39m[0m
+    at constructor (C:\Users\Ayush Mishra\Desktop\ConnectSphere-Frontend\node_modules\@babel\parser\lib\index.js:365:19)
+    at FlowParserMixin.raise (C:\Users\Ayush Mishra\Desktop\ConnectSphere-Frontend\node_modules\@babel\parser\lib\index.js:6599:19)
+    at FlowParserMixin.jsxParseElementAt (C:\Users\Ayush Mishra\Desktop\ConnectSphere-Frontend\node_modules\@babel\parser\lib\index.js:4727:16)
+    at FlowParserMixin.jsxParseElement (C:\Users\Ayush Mishra\Desktop\ConnectSphere-Frontend\node_modules\@babel\parser\lib\index.js:4749:17)
+    at FlowParserMixin.parseExprAtom (C:\Users\Ayush Mishra\Desktop\ConnectSphere-Frontend\node_modules\@babel\parser\lib\index.js:4759:19)
+    at FlowParserMixin.parseExprSubscripts (C:\Users\Ayush Mishra\Desktop\ConnectSphere-Frontend\node_modules\@babel\parser\lib\index.js:11081:23)
+    at FlowParserMixin.parseUpdate (C:\Users\Ayush Mishra\Desktop\ConnectSphere-Frontend\node_modules\@babel\parser\lib\index.js:11066:21)
+    at FlowParserMixin.parseMaybeUnary (C:\Users\Ayush Mishra\Desktop\ConnectSphere-Frontend\node_modules\@babel\parser\lib\index.js:11046:23)
+    at FlowParserMixin.parseMaybeUnaryOrPrivate (C:\Users\Ayush Mishra\Desktop\ConnectSphere-Frontend\node_modules\@babel\parser\lib\index.js:10899:61)
+    at FlowParserMixin.parseExprOps (C:\Users\Ayush Mishra\Desktop\ConnectSphere-Frontend\node_modules\@babel\parser\lib\index.js:10904:23)
+    at FlowParserMixin.parseMaybeConditional (C:\Users\Ayush Mishra\Desktop\ConnectSphere-Frontend\node_modules\@babel\parser\lib\index.js:10881:23)
+    at FlowParserMixin.parseMaybeAssign (C:\Users\Ayush Mishra\Desktop\ConnectSphere-Frontend\node_modules\@babel\parser\lib\index.js:10831:21)
+    at C:\Users\Ayush Mishra\Desktop\ConnectSphere-Frontend\node_modules\@babel\parser\lib\index.js:3498:39
+    at FlowParserMixin.tryParse (C:\Users\Ayush Mishra\Desktop\ConnectSphere-Frontend\node_modules\@babel\parser\lib\index.js:6907:20)
+    at FlowParserMixin.parseMaybeAssign (C:\Users\Ayush Mishra\Desktop\ConnectSphere-Frontend\node_modules\@babel\parser\lib\index.js:3498:18)
+    at C:\Users\Ayush Mishra\Desktop\ConnectSphere-Frontend\node_modules\@babel\parser\lib\index.js:10800:39
+    at FlowParserMixin.allowInAnd (C:\Users\Ayush Mishra\Desktop\ConnectSphere-Frontend\node_modules\@babel\parser\lib\index.js:12426:12)
+    at FlowParserMixin.parseMaybeAssignAllowIn (C:\Users\Ayush Mishra\Desktop\ConnectSphere-Frontend\node_modules\@babel\parser\lib\index.js:10800:17)
+    at FlowParserMixin.parseMaybeAssignAllowInOrVoidPattern (C:\Users\Ayush Mishra\Desktop\ConnectSphere-Frontend\node_modules\@babel\parser\lib\index.js:12493:17)
+    at FlowParserMixin.parseParenAndDistinguishExpression (C:\Users\Ayush Mishra\Desktop\ConnectSphere-Frontend\node_modules\@babel\parser\lib\index.js:11675:28)
+    at FlowParserMixin.parseParenAndDistinguishExpression (C:\Users\Ayush Mishra\Desktop\ConnectSphere-Frontend\node_modules\@babel\parser\lib\index.js:3591:18)
+    at FlowParserMixin.parseExprAtom (C:\Users\Ayush Mishra\Desktop\ConnectSphere-Frontend\node_modules\@babel\parser\lib\index.js:11331:23)
+    at FlowParserMixin.parseExprAtom (C:\Users\Ayush Mishra\Desktop\ConnectSphere-Frontend\node_modules\@babel\parser\lib\index.js:4764:20)
+    at FlowParserMixin.parseExprSubscripts (C:\Users\Ayush Mishra\Desktop\ConnectSphere-Frontend\node_modules\@babel\parser\lib\index.js:11081:23)
+    at FlowParserMixin.parseUpdate (C:\Users\Ayush Mishra\Desktop\ConnectSphere-Frontend\node_modules\@babel\parser\lib\index.js:11066:21)
+    at FlowParserMixin.parseMaybeUnary (C:\Users\Ayush Mishra\Desktop\ConnectSphere-Frontend\node_modules\@babel\parser\lib\index.js:11046:23)
+    at FlowParserMixin.parseMaybeUnaryOrPrivate (C:\Users\Ayush Mishra\Desktop\ConnectSphere-Frontend\node_modules\@babel\parser\lib\index.js:10899:61)
+    at FlowParserMixin.parseExprOps (C:\Users\Ayush Mishra\Desktop\ConnectSphere-Frontend\node_modules\@babel\parser\lib\index.js:10904:23)
+    at FlowParserMixin.parseMaybeConditional (C:\Users\Ayush Mishra\Desktop\ConnectSphere-Frontend\node_modules\@babel\parser\lib\index.js:10881:23)
+    at FlowParserMixin.parseMaybeAssign (C:\Users\Ayush Mishra\Desktop\ConnectSphere-Frontend\node_modules\@babel\parser\lib\index.js:10831:21)
+    at FlowParserMixin.parseMaybeAssign (C:\Users\Ayush Mishra\Desktop\ConnectSphere-Frontend\node_modules\@babel\parser\lib\index.js:3549:18)
+    at FlowParserMixin.parseExpressionBase (C:\Users\Ayush Mishra\Desktop\ConnectSphere-Frontend\node_modules\@babel\parser\lib\index.js:10784:23)
+    at C:\Users\Ayush Mishra\Desktop\ConnectSphere-Frontend\node_modules\@babel\parser\lib\index.js:10780:39
+    at FlowParserMixin.allowInAnd (C:\Users\Ayush Mishra\Desktop\ConnectSphere-Frontend\node_modules\@babel\parser\lib\index.js:12421:16)
+    at FlowParserMixin.parseExpression (C:\Users\Ayush Mishra\Desktop\ConnectSphere-Frontend\node_modules\@babel\parser\lib\index.js:10780:17)
+    at FlowParserMixin.parseReturnStatement (C:\Users\Ayush Mishra\Desktop\ConnectSphere-Frontend\node_modules\@babel\parser\lib\index.js:13142:28)
+    at FlowParserMixin.parseStatementContent (C:\Users\Ayush Mishra\Desktop\ConnectSphere-Frontend\node_modules\@babel\parser\lib\index.js:12798:21)
+    at FlowParserMixin.parseStatementLike (C:\Users\Ayush Mishra\Desktop\ConnectSphere-Frontend\node_modules\@babel\parser\lib\index.js:12767:17)
+    at FlowParserMixin.parseStatementLike (C:\Users\Ayush Mishra\Desktop\ConnectSphere-Frontend\node_modules\@babel\parser\lib\index.js:2918:24)
+    at FlowParserMixin.parseStatementListItem (C:\Users\Ayush Mishra\Desktop\ConnectSphere-Frontend\node_modules\@babel\parser\lib\index.js:12747:17)
+    at FlowParserMixin.parseBlockOrModuleBlockBody (C:\Users\Ayush Mishra\Desktop\ConnectSphere-Frontend\node_modules\@babel\parser\lib\index.js:13316:61)
+    at FlowParserMixin.parseBlockBody (C:\Users\Ayush Mishra\Desktop\ConnectSphere-Frontend\node_modules\@babel\parser\lib\index.js:13309:10)
+    at FlowParserMixin.parseBlock (C:\Users\Ayush Mishra\Desktop\ConnectSphere-Frontend\node_modules\@babel\parser\lib\index.js:13297:10)
+    at FlowParserMixin.parseFunctionBody (C:\Users\Ayush Mishra\Desktop\ConnectSphere-Frontend\node_modules\@babel\parser\lib\index.js:12100:24)
+    at FlowParserMixin.parseFunctionBody (C:\Users\Ayush Mishra\Desktop\ConnectSphere-Frontend\node_modules\@babel\parser\lib\index.js:2895:11)
+    at FlowParserMixin.parseFunctionBodyAndFinish (C:\Users\Ayush Mishra\Desktop\ConnectSphere-Frontend\node_modules\@babel\parser\lib\index.js:12086:10)
+    at FlowParserMixin.parseFunctionBodyAndFinish (C:\Users\Ayush Mishra\Desktop\ConnectSphere-Frontend\node_modules\@babel\parser\lib\index.js:2903:18)
+    at C:\Users\Ayush Mishra\Desktop\ConnectSphere-Frontend\node_modules\@babel\parser\lib\index.js:13445:12
+    at FlowParserMixin.withSmartMixTopicForbiddingContext (C:\Users\Ayush Mishra\Desktop\ConnectSphere-Frontend\node_modules\@babel\parser\lib\index.js:12403:14)
+    at FlowParserMixin.parseFunction (C:\Users\Ayush Mishra\Desktop\ConnectSphere-Frontend\node_modules\@babel\parser\lib\index.js:13444:10)
+
+[1m[31mERROR[39m[22m in [1m[eslint] 
+src\components\feed\PostCard.jsx
+  Line 561:4:  Parsing [1m[31merror[39m[22m[1m: Expected corresponding JSX closing tag for <article>. (561:4)
+
+[39m[22m
+
+webpack compiled with [1m[31m2 errors[39m[22m
+Compiling...
+Compiled successfully!
+webpack compiled [1m[32msuccessfully[39m[22m
+Compiling...
+Compiled successfully!
+webpack compiled [1m[32msuccessfully[39m[22m
+Compiling...
+Compiled successfully!
+webpack compiled [1m[32msuccessfully[39m[22m
+Compiling...
+Compiled successfully!
+webpack compiled [1m[32msuccessfully[39m[22m
+Compiling...
+Compiled successfully!
+webpack compiled [1m[32msuccessfully[39m[22m
+Compiling...
+Compiled successfully!
+webpack compiled [1m[32msuccessfully[39m[22m
+Compiling...
+Compiled successfully!
+webpack compiled [1m[32msuccessfully[39m[22m
+Compiling...
+Compiled successfully!
+webpack compiled [1m[32msuccessfully[39m[22m
+Compiling...
+Compiled successfully!
+webpack compiled [1m[32msuccessfully[39m[22m
+Compiling...
+Compiled successfully!
+webpack compiled [1m[32msuccessfully[39m[22m
+Compiling...
+Compiled successfully!
+webpack compiled [1m[32msuccessfully[39m[22m

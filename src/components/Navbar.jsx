@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Link, NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import SearchBar from './search/SearchBar';
-import { notificationApi } from '../api';
+import { fetchAuthorizedMediaUrl, notificationApi } from '../api';
 
 const BellIcon = ({ size = 21 }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -31,6 +31,41 @@ const ShieldIcon = ({ size = 18 }) => (
   </svg>
 );
 
+function useAuthorizedAvatar(src) {
+  const [avatarUrl, setAvatarUrl] = useState('');
+
+  useEffect(() => {
+    let alive = true;
+    let objectUrl = '';
+
+    if (!src) {
+      setAvatarUrl('');
+      return undefined;
+    }
+
+    const normalized = String(src);
+    if (normalized.startsWith('blob:') || normalized.startsWith('data:')) {
+      setAvatarUrl(normalized);
+      return undefined;
+    }
+
+    fetchAuthorizedMediaUrl(normalized)
+      .then(url => {
+        objectUrl = url;
+        if (alive) setAvatarUrl(url);
+      })
+      .catch(() => {
+        if (alive) setAvatarUrl('');
+      });
+
+    return () => {
+      alive = false;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [src]);
+
+  return avatarUrl;
+}
 export default function Navbar() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
@@ -46,7 +81,7 @@ export default function Navbar() {
   const menuRef = useRef();
 
   useEffect(() => {
-    if (!user || user.role === 'GUEST') return;
+    if (!user || user.role === 'GUEST' || user.role === 'ADMIN') return;
     const poll = () => notificationApi.getUnreadCount(user.userId)
       .then(({ data }) => setUnread(data.count || 0))
       .catch(() => {});
@@ -87,40 +122,48 @@ export default function Navbar() {
   };
 
   const avatarInitial = user?.username?.[0]?.toUpperCase() || 'C';
+  const avatarSrc = useAuthorizedAvatar(user?.profilePicture);
+  const hideSearch = ['/login', '/register', '/admin'].includes(location.pathname);
   const navIconClass = ({ isActive }) =>
     `w-10 h-10 rounded-full flex items-center justify-center transition-colors ${isActive ? 'text-black bg-neutral-100' : 'text-neutral-700 hover:bg-neutral-100'}`;
 
   return (
     <>
       <nav className="sticky top-0 z-50 bg-white/95 backdrop-blur border-b border-neutral-200">
-        <div className="page-container">
+        <div className={hideSearch ? 'w-full px-5 sm:px-8' : 'page-container'}>
           <div className="h-16 flex items-center gap-4">
-            <Link to="/" className="flex items-center gap-3 flex-shrink-0">
+            <Link to={user?.role === 'ADMIN' ? '/admin' : '/'} className="flex items-center gap-3 flex-shrink-0">
               <div className="w-9 h-9 rounded-xl g-primary flex items-center justify-center text-white font-black text-base shadow-sm">C</div>
               <span className="font-black text-xl tracking-tight text-neutral-950 hidden sm:block">ConnectSphere</span>
             </Link>
 
-            <div className="flex-1 max-w-[360px] mx-auto hidden md:block">
-              <SearchBar />
-            </div>
+            {!hideSearch && (
+              <div className="flex-1 max-w-[360px] mx-auto hidden md:block">
+                <SearchBar />
+              </div>
+            )}
 
-            <div className="flex-1 md:hidden" />
+            <div className={hideSearch ? 'flex-1' : 'flex-1 md:hidden'} />
 
             <div className="flex items-center gap-1.5">
-              <button
-                type="button"
-                onClick={() => setMobileSearch(v => !v)}
-                className="w-10 h-10 rounded-full flex items-center justify-center text-neutral-700 hover:bg-neutral-100 md:hidden"
-                aria-label="Search"
-              >
-                <SearchIcon />
-              </button>
+              {!hideSearch && (
+                <button
+                  type="button"
+                  onClick={() => setMobileSearch(v => !v)}
+                  className="w-10 h-10 rounded-full flex items-center justify-center text-neutral-700 hover:bg-neutral-100 md:hidden"
+                  aria-label="Search"
+                >
+                  <SearchIcon />
+                </button>
+              )}
 
               {user ? (
                 <>
-                  <NavLink to="/" className={navIconClass} aria-label="Home">
-                    <HomeIcon />
-                  </NavLink>
+                  {user.role !== 'ADMIN' && (
+                    <NavLink to="/" className={navIconClass} aria-label="Home">
+                      <HomeIcon />
+                    </NavLink>
+                  )}
 
                   {user.role === 'ADMIN' && (
                     <Link to="/admin" className="hidden sm:flex items-center gap-2 px-3 h-9 rounded-full bg-rose-50 text-rose-600 font-bold text-xs hover:bg-rose-100">
@@ -189,8 +232,8 @@ export default function Navbar() {
                       aria-label="Account menu"
                     >
                       <div className="avatar w-9 h-9 text-sm">
-                        {user.profilePicture
-                          ? <img src={user.profilePicture} alt="" className="w-full h-full object-cover" />
+                        {avatarSrc
+                          ? <img src={avatarSrc} alt="" className="w-full h-full object-cover" />
                           : avatarInitial}
                       </div>
                     </button>
@@ -198,12 +241,17 @@ export default function Navbar() {
                     {showMenu && (
                       <div className="dropdown absolute right-0 top-12 w-56 overflow-hidden py-1">
                         <div className="px-4 py-3 border-b border-neutral-100">
-                          <p className="font-bold text-sm truncate">{user.fullName || user.username}</p>
-                          <p className="text-xs text-neutral-500 truncate">@{user.username}</p>
+                          <p className="font-bold text-sm truncate">{user.role === 'ADMIN' ? 'Admin Control' : (user.fullName || user.username)}</p>
+                          <p className="text-xs text-neutral-500 truncate">{user.role === 'ADMIN' ? 'Monitoring access only' : `@${user.username}`}</p>
                         </div>
-                        <Link to={`/profile/${user.userId}`} className="block px-4 py-2.5 text-sm hover:bg-neutral-50">Profile</Link>
-                        <Link to="/edit-profile" className="block px-4 py-2.5 text-sm hover:bg-neutral-50">Edit profile</Link>
-                        {user.role === 'ADMIN' && <Link to="/admin" className="block px-4 py-2.5 text-sm font-semibold text-rose-600 hover:bg-rose-50">Admin dashboard</Link>}
+                        {user.role === 'ADMIN' ? (
+                          <Link to="/admin" className="block px-4 py-2.5 text-sm font-semibold text-rose-600 hover:bg-rose-50">Admin dashboard</Link>
+                        ) : (
+                          <>
+                            <Link to={`/profile/${user.userId}`} className="block px-4 py-2.5 text-sm hover:bg-neutral-50">Profile</Link>
+                            <Link to="/edit-profile" className="block px-4 py-2.5 text-sm hover:bg-neutral-50">Edit profile</Link>
+                          </>
+                        )}
                         <hr className="divider my-1" />
                         <button
                           type="button"
@@ -226,42 +274,57 @@ export default function Navbar() {
           </div>
         </div>
 
-        {mobileSearch && (
+        {mobileSearch && !hideSearch && (
           <div className="md:hidden px-4 pb-3 pt-1 border-t border-neutral-100 bg-white">
             <SearchBar />
           </div>
         )}
       </nav>
 
-      {user && (
+      {user && !(user.role === 'ADMIN' && location.pathname === '/admin') && (
         <div className="fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-neutral-200 md:hidden">
-          <div className="grid grid-cols-4 h-14">
-            <NavLink to="/" className="flex items-center justify-center text-neutral-800" aria-label="Home">
-              <HomeIcon size={23} />
-            </NavLink>
-            <button type="button" onClick={() => setMobileSearch(v => !v)} className="flex items-center justify-center text-neutral-800" aria-label="Search">
-              <SearchIcon size={23} />
-            </button>
+          <div className={`${user.role === 'ADMIN' ? 'grid-cols-2' : (hideSearch ? 'grid-cols-3' : 'grid-cols-4')} grid h-14`}>
             {user.role === 'ADMIN' ? (
-              <Link to="/admin" className="flex items-center justify-center text-rose-600" aria-label="Admin">
-                <ShieldIcon size={21} />
-              </Link>
+              <>
+                <Link to="/admin" className="flex items-center justify-center gap-2 text-rose-600 text-xs font-black" aria-label="Admin dashboard">
+                  <ShieldIcon size={20} />
+                  Dashboard
+                </Link>
+                <button
+                  type="button"
+                  onClick={() => { logout(); navigate('/login'); }}
+                  className="flex items-center justify-center text-rose-600 text-xs font-black"
+                >
+                  Logout
+                </button>
+              </>
             ) : (
-              <button type="button" onClick={openNotifs} className="relative flex items-center justify-center text-neutral-800" aria-label="Notifications">
-                <BellIcon size={23} />
-                {unread > 0 && <span className="notif-dot top-2 right-[calc(50%-16px)]">{unread > 9 ? '9+' : unread}</span>}
-              </button>
+              <>
+                <NavLink to="/" className="flex items-center justify-center text-neutral-800" aria-label="Home">
+                  <HomeIcon size={23} />
+                </NavLink>
+                {!hideSearch && (
+                  <button type="button" onClick={() => setMobileSearch(v => !v)} className="flex items-center justify-center text-neutral-800" aria-label="Search">
+                    <SearchIcon size={23} />
+                  </button>
+                )}
+                <button type="button" onClick={openNotifs} className="relative flex items-center justify-center text-neutral-800" aria-label="Notifications">
+                  <BellIcon size={23} />
+                  {unread > 0 && <span className="notif-dot top-2 right-[calc(50%-16px)]">{unread > 9 ? '9+' : unread}</span>}
+                </button>
+                <Link to={`/profile/${user.userId}`} className="flex items-center justify-center" aria-label="Profile">
+                  <div className="avatar w-7 h-7 text-xs">
+                    {avatarSrc
+                      ? <img src={avatarSrc} alt="" className="w-full h-full object-cover" />
+                      : avatarInitial}
+                  </div>
+                </Link>
+              </>
             )}
-            <Link to={`/profile/${user.userId}`} className="flex items-center justify-center" aria-label="Profile">
-              <div className="avatar w-7 h-7 text-xs">
-                {user.profilePicture
-                  ? <img src={user.profilePicture} alt="" className="w-full h-full object-cover" />
-                  : avatarInitial}
-              </div>
-            </Link>
           </div>
         </div>
       )}
     </>
   );
 }
+

@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import React from 'react';
+import { useEffect, useState } from 'react';
+import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { authApi, OAUTH_GOOGLE_URL } from '../../api';
 import { useAuth } from '../../context/AuthContext';
 
@@ -15,18 +16,31 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [showPass, setShowPass] = useState(false);
   const [otpMode, setOtpMode] = useState(false);
-  const [adminMode, setAdminMode] = useState(false);
+  const location = useLocation();
+  const adminRequested = new URLSearchParams(location.search).get('admin') === '1';
+  const [adminMode, setAdminMode] = useState(adminRequested);
   const [otpSent, setOtpSent] = useState(false);
   const [otp, setOtp] = useState('');
   const { login } = useAuth();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    setAdminMode(adminRequested);
+    if (adminRequested) {
+      setOtpMode(false);
+      setOtpSent(false);
+      setOtp('');
+      setError('');
+    }
+  }, [adminRequested]);
 
   const handleSubmit = async (event) => {
     event.preventDefault();
     setError('');
     setLoading(true);
     try {
-      const { data } = await authApi.login(form);
+      const payload = { email: form.email.trim(), password: form.password };
+      const { data } = await authApi.login(payload);
       if (adminMode && data.role !== 'ADMIN') {
         setError('This account is not an admin account.');
         return;
@@ -63,6 +77,21 @@ export default function Login() {
     setOtp('');
     setForm({ email: '', password: '' });
     setError('');
+    navigate('/login?admin=1', { replace: false });
+  };
+
+  const handleUserPasswordMode = () => {
+    setOtpMode(false);
+    setAdminMode(false);
+    setError('');
+    navigate('/login', { replace: true });
+  };
+
+  const handleOtpMode = () => {
+    setOtpMode(true);
+    setAdminMode(false);
+    setError('');
+    navigate('/login', { replace: true });
   };
 
   const handleRequestOtp = async () => {
@@ -105,14 +134,14 @@ export default function Login() {
         <section className="cinematic-copy">
           <div className="cinematic-kicker">
             <span className="w-2 h-2 rounded-full bg-red-500 shadow-[0_0_18px_rgba(237,73,86,0.9)]" />
-            Cinematic social feed
+            Social universe
           </div>
           <h1 className="cinematic-title">
             Your world,
             <span>in motion.</span>
           </h1>
           <p className="cinematic-subtitle">
-            ConnectSphere blends an Instagram-style feed with Netflix-like depth, animated stories, glowing previews, and a clean space to share what matters.
+            Step into a living timeline where every story feels close, every post has presence, and your circle moves with you.
           </p>
           <div className="cinematic-reel">
             {reelCards.map(card => (
@@ -153,25 +182,25 @@ export default function Login() {
             <div className="flex items-center gap-2 mb-5">
               <button
                 type="button"
-                onClick={() => { setOtpMode(false); setAdminMode(false); setError(''); }}
+                onClick={handleUserPasswordMode}
                 className={`auth-tab ${!otpMode && !adminMode ? 'auth-tab-active' : ''}`}
               >
                 Password
               </button>
               <button
                 type="button"
-                onClick={() => { setOtpMode(true); setAdminMode(false); setError(''); }}
+                onClick={handleOtpMode}
                 className={`auth-tab ${otpMode ? 'auth-tab-active' : ''}`}
               >
                 Email OTP
               </button>
-              <button
-                type="button"
+              <Link
+                to="/login?admin=1"
                 onClick={handleAdminMode}
                 className={`auth-tab ${adminMode ? 'auth-tab-active' : ''}`}
               >
                 Admin
-              </button>
+              </Link>
             </div>
 
             <form onSubmit={otpMode ? handleVerifyOtp : handleSubmit} className="space-y-4">
@@ -243,7 +272,7 @@ export default function Login() {
               {adminMode && (
                 <button
                   type="button"
-                  onClick={() => { setAdminMode(false); setForm({ email: '', password: '' }); setError(''); }}
+                  onClick={() => { setAdminMode(false); setForm({ email: '', password: '' }); setError(''); navigate('/login', { replace: true }); }}
                   className="btn-outline cinematic-outline w-full"
                 >
                   Back to user login

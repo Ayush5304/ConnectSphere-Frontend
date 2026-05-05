@@ -43,6 +43,7 @@ function PrivateRoute({ children }) {
   const { user } = useAuth();
   if (!user) return <Navigate to="/login" replace />;
   if (user.role === 'GUEST') return <Navigate to="/login" replace />;
+  if (user.role === 'ADMIN') return <Navigate to="/admin" replace />;
   return children;
 }
 
@@ -74,8 +75,21 @@ function AdminRoute({ children }) {
  */
 function GuestRoute({ children }) {
   const { user } = useAuth();
+  if (user && user.role === 'ADMIN') return <Navigate to="/admin" replace />;
   if (user && user.role !== 'GUEST') return <Navigate to="/" replace />;
   return children;
+}
+
+function HomeRoute() {
+  const { user } = useAuth();
+  if (user?.role === 'ADMIN') return <Navigate to="/admin" replace />;
+  return <Feed />;
+}
+
+function PublicProfileRoute() {
+  const { user } = useAuth();
+  if (user?.role === 'ADMIN') return <Navigate to="/admin" replace />;
+  return <Profile />;
 }
 
 /*
@@ -100,10 +114,10 @@ function AppRoutes() {
       <Navbar />
       <Routes>
         {/* PUBLIC — anyone can view the feed */}
-        <Route path="/" element={<Feed />} />
+        <Route path="/" element={<HomeRoute />} />
 
         {/* PUBLIC - guests can view public profiles */}
-        <Route path="/profile/:userId" element={<Profile />} />
+        <Route path="/profile/:userId" element={<PublicProfileRoute />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/oauth2/callback" element={<OAuth2Callback />} />
@@ -117,6 +131,7 @@ function AppRoutes() {
 
         {/* ADMIN ONLY */}
         <Route path="/admin" element={<AdminRoute><AdminDashboard /></AdminRoute>} />
+        <Route path="/admin/:section" element={<AdminRoute><AdminDashboard /></AdminRoute>} />
 
         {/* Catch-all — any unknown URL goes to home */}
         <Route path="*" element={<Navigate to="/" replace />} />

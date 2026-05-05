@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { postApi, followApi, authApi, likeApi } from '../../api';
 import { useAuth } from '../../context/AuthContext';
 import PostCard from '../feed/PostCard';
@@ -20,6 +20,7 @@ function Avatar({ src, name, size = 'w-10 h-10', textSize = 'text-sm' }) {
 export default function Profile() {
   const { userId } = useParams();
   const { user }   = useAuth();
+  const navigate = useNavigate();
 
   const [profileUser, setProfileUser]   = useState(null);
   const [posts, setPosts]               = useState([]);
@@ -58,6 +59,10 @@ export default function Profile() {
       followApi.getCounts(userId),
       authApi.getUserById(userId),
     ]).then(([postsRes, countsRes, userRes]) => {
+      if (userRes.data?.role === 'ADMIN') {
+        navigate(user?.role === 'ADMIN' ? '/admin' : '/', { replace: true });
+        return;
+      }
       setPosts(postsRes.data);
       setCounts(countsRes.data);
       setProfileUser(userRes.data);
@@ -69,7 +74,7 @@ export default function Profile() {
       followApi.getMutual(user.userId, userId)
         .then(({ data }) => setMutualIds(data || [])).catch(() => {});
     }
-  }, [userId, user]);
+  }, [userId, user, navigate]);
 
   const toggleFollow = async () => {
     if (!user || user.role === 'GUEST') return;

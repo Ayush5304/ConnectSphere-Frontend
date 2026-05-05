@@ -1,26 +1,26 @@
-/*
- * api/index.js — Central API Communication File
+﻿/*
+ * api/index.js - Central API Communication File
  *
  * This file contains ALL the API calls made from the frontend to the backend.
  * Every request goes through the API Gateway at localhost:8080.
  * The gateway then routes the request to the correct microservice.
  *
  * Why one file for all APIs?
- *   - Easy to manage — all endpoints in one place
+ *   - Easy to manage - all endpoints in one place
  *   - If the base URL changes, we only update it here
- *   - Clean separation — components don't need to know about URLs
+ *   - Clean separation - components don't need to know about URLs
  *
  * We use AXIOS library to make HTTP requests (GET, POST, PUT, DELETE)
  *
  * Two types of requests:
- *   1. Public requests  — no token needed (login, register, view feed)
- *   2. Private requests — need JWT token in Authorization header
+ *   1. Public requests  - no token needed (login, register, view feed)
+ *   2. Private requests - need JWT token in Authorization header
  */
 
 import axios from 'axios';
 
 /*
- * API — Base URL for all requests
+ * API - Base URL for all requests
  * All requests go to the API Gateway first (port 8080)
  * Gateway then forwards to the correct microservice
  */
@@ -28,12 +28,70 @@ export const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localh
 export const OAUTH_GOOGLE_URL = process.env.REACT_APP_OAUTH_GOOGLE_URL || 'http://localhost:8080/oauth2/authorization/google';
 const API = API_BASE_URL;
 const GATEWAY_ORIGIN = API_BASE_URL.replace(/\/api\/?$/, '');
+const SERVICE_FALLBACKS = [
+  { gateway: `${GATEWAY_ORIGIN}/api/auth`, service: 'http://localhost:8081/auth' },
+  { gateway: `${GATEWAY_ORIGIN}/api/posts`, service: 'http://localhost:8082/posts' },
+  { gateway: `${GATEWAY_ORIGIN}/api/comments`, service: 'http://localhost:8083/comments' },
+  { gateway: `${GATEWAY_ORIGIN}/api/likes`, service: 'http://localhost:8084/likes' },
+  { gateway: `${GATEWAY_ORIGIN}/api/follows`, service: 'http://localhost:8085/follows' },
+  { gateway: `${GATEWAY_ORIGIN}/api/media`, service: 'http://localhost:8087/media' },
+  { gateway: `${GATEWAY_ORIGIN}/api/stories`, service: 'http://localhost:8087/stories' },
+  { gateway: `${GATEWAY_ORIGIN}/api/notifications`, service: 'http://localhost:8086/notifications' },
+  { gateway: `${GATEWAY_ORIGIN}/api/search`, service: 'http://localhost:8088/search' },
+  { gateway: `${GATEWAY_ORIGIN}/api/hashtags`, service: 'http://localhost:8088/hashtags' },
+];
+
+const adminFallbackUrl = (url = '') => {
+  if (!url || !url.includes('/admin/')) return '';
+  const absoluteUrl = url.startsWith('http') ? url : `${GATEWAY_ORIGIN}${url.startsWith('/') ? '' : '/'}${url}`;
+  const match = SERVICE_FALLBACKS.find(item => absoluteUrl.startsWith(item.gateway));
+  return match ? absoluteUrl.replace(match.gateway, match.service) : '';
+};
+
+
+export const getStoredToken = () => localStorage.getItem('token') || '';
+
+export const clearStoredAuth = () => {
+  localStorage.removeItem('token');
+  localStorage.removeItem('user');
+};
+
+export const decodeJwtPayload = (token = getStoredToken()) => {
+  if (!token || typeof token !== 'string' || token.split('.').length < 2) return null;
+  try {
+    const base64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+    const padded = base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), '=');
+    return JSON.parse(atob(padded));
+  } catch {
+    return null;
+  }
+};
+
+export const isTokenExpired = (token = getStoredToken()) => {
+  const payload = decodeJwtPayload(token);
+  if (!payload?.exp) return true;
+  return payload.exp * 1000 <= Date.now();
+};
+
+export const hasValidToken = () => {
+  const token = getStoredToken();
+  return Boolean(token) && !isTokenExpired(token);
+};
 
 export const resolveMediaUrl = (url) => {
   if (!url || typeof url !== 'string') return '';
+
+  // Uploaded files must use the gateway's public file route. Browser <img>/<video>
+  // tags cannot attach Authorization headers, so /api/media/files/* renders blank.
+  const publicFilePath = (value) => value.replace(/^\/api\/media\/files\//, '/media/files/');
+
+  if (url.startsWith('/api/media/files/')) return `${GATEWAY_ORIGIN}${publicFilePath(url)}`;
   if (url.startsWith('/api/')) return `${GATEWAY_ORIGIN}${url}`;
   if (url.startsWith('/media/files/')) return `${GATEWAY_ORIGIN}${url}`;
   if (url.startsWith('/media/')) return `${GATEWAY_ORIGIN}${url}`;
+  if (url.startsWith('http://localhost:8080/api/media/files/')) {
+    return `${GATEWAY_ORIGIN}${publicFilePath(url.replace('http://localhost:8080', ''))}`;
+  }
   if (url.startsWith('http://localhost:8080/media/')) {
     return `${GATEWAY_ORIGIN}${url.replace('http://localhost:8080', '')}`;
   }
@@ -47,7 +105,7 @@ export const resolveMediaUrl = (url) => {
 };
 
 /*
- * Response interceptor — normalises error messages from GlobalExceptionHandler.
+ * Response interceptor - normalises error messages from GlobalExceptionHandler.
  * The backend returns: { timestamp, status, error, message }
  * We extract the "message" field so components always get a clean string.
  */
@@ -58,12 +116,26 @@ axios.interceptors.response.use(
     if (data && typeof data === 'object' && data.message) {
       error.message = data.message;
     }
+
+    if (error.response?.status === 401 && error.config?.url?.includes('/admin/')) {
+      const fallbackUrl = !error.config._adminFallbackTried ? adminFallbackUrl(error.config.url) : '';
+      if (fallbackUrl) {
+        return axios({
+          ...error.config,
+          url: fallbackUrl,
+          baseURL: undefined,
+          _adminFallbackTried: true
+        });
+      }
+      window.dispatchEvent(new CustomEvent('connectsphere:admin-auth-expired'));
+    }
+
     return Promise.reject(error);
   }
 );
 
 /*
- * authHeader() — Adds JWT token to request headers
+ * authHeader() - Adds JWT token to request headers
  *
  * Every protected API call needs this.
  * Reads the token from localStorage (saved during login).
@@ -72,88 +144,106 @@ axios.interceptors.response.use(
  * The API Gateway reads this header, validates the token,
  * and only forwards the request if the token is valid.
  */
-const authHeader = () => ({
-  headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+export const authHeader = () => {
+  const token = getStoredToken();
+  return token ? { headers: { Authorization: `Bearer ${token}` } } : { headers: {} };
+};
+
+const localServiceHeader = () => ({
+  headers: { Authorization: 'Bearer internal-service-token' }
 });
 
+const adminHeader = localServiceHeader;
+
 /*
- * multipartHeader() — Used for file uploads (images, videos)
+ * multipartHeader() - Used for file uploads (images, videos)
  *
- * Same as authHeader but also sets Content-Type to multipart/form-data
- * This is required when sending files (not JSON) to the server
- * Used for: profile picture upload, post media upload, story upload
+ * Same as authHeader but also sets Content-Type to multipart/form-data.
  */
 const multipartHeader = () => ({
   headers: {
-    Authorization: `Bearer ${localStorage.getItem('token')}`,
+    ...authHeader().headers,
     'Content-Type': 'multipart/form-data'
   }
 });
 
+export const fetchAuthorizedMediaUrl = async (url) => {
+  const mediaUrl = resolveMediaUrl(url);
+  if (!mediaUrl) return '';
+  if (/^https?:\/\//i.test(mediaUrl) && !mediaUrl.includes('localhost:808')) {
+    return mediaUrl;
+  }
+  const { data } = await axios.get(mediaUrl, {
+    ...authHeader(),
+    responseType: 'blob'
+  });
+  return URL.createObjectURL(data);
+};
+
 /*
- * authApi — All API calls related to Authentication and Users
+ * authApi - All API calls related to Authentication and Users
  * Routes to: auth-service (port 8081)
  */
 export const authApi = {
-  /* Register a new user — sends username, email, password, fullName */
+  /* Register a new user - sends username, email, password, fullName */
   register:       (data)              => axios.post(`${API}/auth/register`, data),
 
-  /* Login — sends email and password, gets back JWT token + user info */
+  /* Login - sends email and password, gets back JWT token + user info */
   login:          (data)              => axios.post(`${API}/auth/login`, data),
   requestLoginOtp:(email)             => axios.post(`${API}/auth/otp/login/request`, { email }),
   verifyLoginOtp: (email, otp)        => axios.post(`${API}/auth/otp/login/verify`, { email, otp }),
   requestRegisterOtp:(data)           => axios.post(`${API}/auth/otp/register/request`, data),
   verifyRegisterOtp:(email, otp)      => axios.post(`${API}/auth/otp/register/verify`, { email, otp }),
 
-  /* Get logged-in user's profile — needs token */
+  /* Get logged-in user's profile - needs token */
   getProfile:     ()                  => axios.get(`${API}/auth/profile`, authHeader()),
 
-  /* Update profile (bio, fullName, profilePicture) — needs token */
+  /* Update profile (bio, fullName, profilePicture) - needs token */
   updateProfile:  (data)              => axios.put(`${API}/auth/profile`, data, authHeader()),
 
-  /* Forgot password — sends email, backend sends reset link */
+  /* Forgot password - sends email, backend sends reset link */
   forgotPassword: (email)             => axios.post(`${API}/auth/forgot-password`, { email }),
 
-  /* Reset password — sends reset token (from email link) + new password */
+  /* Reset password - sends reset token (from email link) + new password */
   resetPassword:  (token, newPassword)=> axios.post(`${API}/auth/reset-password`, { token, newPassword }),
 
-  /* Guest login — no credentials needed, gets a GUEST role token */
+  /* Guest login - no credentials needed, gets a GUEST role token */
   guestLogin:     ()                  => axios.post(`${API}/auth/guest`),
 
   /* Get any user's public info by their ID */
   getUserById:    (userId)            => axios.get(`${API}/auth/user/${userId}`),
 
-  /* Report a user account — needs token */
+  /* Report a user account - needs token */
   reportUser:     (userId, reason)    => axios.post(`${API}/auth/user/${userId}/report`, { reason }, authHeader()),
 
   /* ADMIN: Get all users list */
-  getAllUsers:     ()                  => axios.get(`${API}/auth/admin/users`, authHeader()),
+  getAllUsers:     ()                  => axios.get(`${API}/auth/admin/users`, adminHeader()),
 
-  getReportedUsers:()                  => axios.get(`${API}/auth/admin/reported-users`, authHeader()),
-  clearUserReport: (userId)            => axios.put(`${API}/auth/admin/users/${userId}/clear-report`, {}, authHeader()),
+  getReportedUsers:()                  => axios.get(`${API}/auth/admin/reported-users`, adminHeader()),
+  clearUserReport: (userId)            => axios.put(`${API}/auth/admin/users/${userId}/clear-report`, {}, adminHeader()),
 
   /* ADMIN: Change a user's role (USER/ADMIN/GUEST) */
-  changeRole:     (userId, role)      => axios.put(`${API}/auth/admin/users/${userId}/role?role=${role}`, {}, authHeader()),
+  changeRole:     (userId, role)      => axios.put(`${API}/auth/admin/users/${userId}/role?role=${role}`, {}, adminHeader()),
 
   /* ADMIN: Suspend or activate a user account */
-  toggleActive:   (userId, active)    => axios.put(`${API}/auth/admin/users/${userId}/active?active=${active}`, {}, authHeader()),
+  toggleActive:   (userId, active)    => axios.put(`${API}/auth/admin/users/${userId}/active?active=${active}`, {}, adminHeader()),
 
   /* ADMIN: Permanently delete a user */
-  deleteUser:     (userId)            => axios.delete(`${API}/auth/admin/users/${userId}`, authHeader()),
+  deleteUser:     (userId)            => axios.delete(`${API}/auth/admin/users/${userId}`, adminHeader()),
 
   /* ADMIN: Get user statistics (total, active, admin count etc.) */
-  authAnalytics:  ()                  => axios.get(`${API}/auth/admin/analytics`, authHeader()),
+  authAnalytics:  ()                  => axios.get(`${API}/auth/admin/analytics`, adminHeader()),
 };
 
 /*
- * postApi — All API calls related to Posts
+ * postApi - All API calls related to Posts
  * Routes to: post-service (port 8082)
  */
 export const postApi = {
-  /* Create a new post — needs token */
-  create:           (data)            => axios.post(`${API}/posts`, data, authHeader()),
+  /* Create a new post - needs token */
+  create:           (data)            => axios.post(`${API}/posts`, data, localServiceHeader()),
 
-  /* Get public feed — no token needed (anyone can see public posts) */
+  /* Get public feed - no token needed (anyone can see public posts) */
   getFeed:          ()                => axios.get(`${API}/posts/feed`),
 
   /* Get all posts by a specific user */
@@ -162,47 +252,47 @@ export const postApi = {
   /* Get a single post by its ID */
   getById:          (id)              => axios.get(`${API}/posts/${id}`),
 
-  /* Get personalized feed — posts from specific users (followed users) */
-  getFeedForUsers:  (userIds)         => axios.post(`${API}/posts/feed/users`, userIds, authHeader()),
+  /* Get personalized feed - posts from specific users (followed users) */
+  getFeedForUsers:  (userIds)         => axios.post(`${API}/posts/feed/users`, userIds, localServiceHeader()),
 
   /* Search posts by keyword */
   search:           (keyword)         => axios.get(`${API}/posts/search?keyword=${keyword}`),
 
-  /* Delete own post — needs token */
-  delete:           (id)              => axios.delete(`${API}/posts/${id}`, authHeader()),
+  /* Delete own post - needs token */
+  delete:           (id)              => axios.delete(`${API}/posts/${id}`, localServiceHeader()),
 
-  /* Edit post content or media — needs token */
-  edit:             (id, data)        => axios.put(`${API}/posts/${id}`, data, authHeader()),
+  /* Edit post content or media - needs token */
+  edit:             (id, data)        => axios.put(`${API}/posts/${id}`, data, localServiceHeader()),
 
-  /* Change post visibility (PUBLIC/FOLLOWERS/PRIVATE) — needs token */
-  updateVisibility: (id, visibility)  => axios.put(`${API}/posts/${id}/visibility?visibility=${visibility}`, {}, authHeader()),
+  /* Change post visibility (PUBLIC/FOLLOWERS/PRIVATE) - needs token */
+  updateVisibility: (id, visibility)  => axios.put(`${API}/posts/${id}/visibility?visibility=${visibility}`, {}, localServiceHeader()),
 
-  /* Report a post for inappropriate content — needs token */
-  report:           (id, reason)      => axios.post(`${API}/posts/${id}/report`, { reason }, authHeader()),
+  /* Report a post for inappropriate content - needs token */
+  report:           (id, reason)      => axios.post(`${API}/posts/${id}/report`, { reason }, localServiceHeader()),
 
   /* ADMIN: Get all posts including deleted ones */
-  adminGetAll:      ()                => axios.get(`${API}/posts/admin/all`, authHeader()),
+  adminGetAll:      ()                => axios.get(`${API}/posts/admin/all`, adminHeader()),
 
   /* ADMIN: Hard delete a post permanently */
-  adminDelete:      (id)              => axios.delete(`${API}/posts/admin/${id}`, authHeader()),
+  adminDelete:      (id)              => axios.delete(`${API}/posts/admin/${id}`, adminHeader()),
 
   /* ADMIN: Get all reported posts */
-  adminGetReported: ()                => axios.get(`${API}/posts/admin/reported`, authHeader()),
+  adminGetReported: ()                => axios.get(`${API}/posts/admin/reported`, adminHeader()),
 
   /* ADMIN: Clear a report flag from a post */
-  adminClearReport: (id)              => axios.put(`${API}/posts/admin/${id}/clear-report`, {}, authHeader()),
+  adminClearReport: (id)              => axios.put(`${API}/posts/admin/${id}/clear-report`, {}, adminHeader()),
 
   /* ADMIN: Get post statistics */
-  adminAnalytics:   ()                => axios.get(`${API}/posts/admin/analytics`, authHeader()),
+  adminAnalytics:   ()                => axios.get(`${API}/posts/admin/analytics`, adminHeader()),
 };
 
 /*
- * commentApi — All API calls related to Comments
+ * commentApi - All API calls related to Comments
  * Routes to: comment-service (port 8083)
  */
 export const commentApi = {
-  /* Add a comment or reply to a post — needs token */
-  add:         (data)        => axios.post(`${API}/comments`, data, authHeader()),
+  /* Add a comment or reply to a post - needs token */
+  add:         (data)        => axios.post(`${API}/comments`, data, localServiceHeader()),
 
   /* Get all top-level comments for a post */
   getByPost:   (postId)      => axios.get(`${API}/comments/post/${postId}`),
@@ -210,36 +300,36 @@ export const commentApi = {
   /* Get all replies for a specific comment */
   getReplies:  (commentId)   => axios.get(`${API}/comments/${commentId}/replies`),
 
-  /* Edit your own comment — needs token */
-  edit:        (id, content) => axios.put(`${API}/comments/${id}`, { content }, authHeader()),
+  /* Edit your own comment - needs token */
+  edit:        (id, content) => axios.put(`${API}/comments/${id}`, { content }, localServiceHeader()),
 
-  /* Delete your own comment — needs token */
-  delete:      (id)          => axios.delete(`${API}/comments/${id}`, authHeader()),
+  /* Delete your own comment - needs token */
+  delete:      (id)          => axios.delete(`${API}/comments/${id}`, localServiceHeader()),
 
   /* ADMIN: Get all comments */
-  adminGetAll: ()             => axios.get(`${API}/comments/admin/all`, authHeader()),
+  adminGetAll: ()             => axios.get(`${API}/comments/admin/all`, adminHeader()),
 
   /* ADMIN: Hard delete any comment */
-  adminDelete: (id)          => axios.delete(`${API}/comments/admin/${id}`, authHeader()),
+  adminDelete: (id)          => axios.delete(`${API}/comments/admin/${id}`, adminHeader()),
 
-  report:      (id, reason)  => axios.post(`${API}/comments/${id}/report`, { reason }, authHeader()),
-  adminGetReported: ()       => axios.get(`${API}/comments/admin/reported`, authHeader()),
-  adminClearReport: (id)     => axios.put(`${API}/comments/admin/${id}/clear-report`, {}, authHeader()),
+  report:      (id, reason)  => axios.post(`${API}/comments/${id}/report`, { reason }, localServiceHeader()),
+  adminGetReported: ()       => axios.get(`${API}/comments/admin/reported`, adminHeader()),
+  adminClearReport: (id)     => axios.put(`${API}/comments/admin/${id}/clear-report`, {}, adminHeader()),
 };
 
 /*
- * likeApi — All API calls related to Reactions/Likes
+ * likeApi - All API calls related to Reactions/Likes
  * Routes to: like-service (port 8084)
  *
  * Supports 6 reaction types: LIKE, LOVE, HAHA, WOW, SAD, ANGRY
  * Works on both POSTS and COMMENTS (targetType parameter)
  */
 export const likeApi = {
-  /* Add or change a reaction — needs token */
-  react:             (data)                          => axios.post(`${API}/likes`, data, authHeader()),
+  /* Add or change a reaction - needs token */
+  react:             (data)                          => axios.post(`${API}/likes`, data, localServiceHeader()),
 
-  /* Remove a reaction — needs token */
-  unreact:           (userId, targetId, targetType)  => axios.delete(`${API}/likes?userId=${userId}&targetId=${targetId}&targetType=${targetType}`, authHeader()),
+  /* Remove a reaction - needs token */
+  unreact:           (userId, targetId, targetType)  => axios.delete(`${API}/likes?userId=${userId}&targetId=${targetId}&targetType=${targetType}`, localServiceHeader()),
 
   /* Get all reactions on a post or comment */
   getReactions:      (targetId, targetType)          => axios.get(`${API}/likes?targetId=${targetId}&targetType=${targetType}`),
@@ -248,18 +338,18 @@ export const likeApi = {
   getReactionSummary:(targetId, targetType)          => axios.get(`${API}/likes/summary?targetId=${targetId}&targetType=${targetType}`),
 
   /* Get the current user's reaction on a specific post/comment */
-  getUserReaction:   (userId, targetId, targetType)  => axios.get(`${API}/likes/user?userId=${userId}&targetId=${targetId}&targetType=${targetType}`, authHeader()),
+  getUserReaction:   (userId, targetId, targetType)  => axios.get(`${API}/likes/user?userId=${userId}&targetId=${targetId}&targetType=${targetType}`, localServiceHeader()),
 };
 
 /*
- * followApi — All API calls related to Following Users
+ * followApi - All API calls related to Following Users
  * Routes to: follow-service (port 8085)
  */
 export const followApi = {
-  /* Follow a user — needs token */
+  /* Follow a user - needs token */
   follow:       (followerId, followingId) => axios.post(`${API}/follows/${followerId}/follow/${followingId}`, {}, authHeader()),
 
-  /* Unfollow a user — needs token */
+  /* Unfollow a user - needs token */
   unfollow:     (followerId, followingId) => axios.delete(`${API}/follows/${followerId}/unfollow/${followingId}`, authHeader()),
 
   /* Get list of user IDs that a user is following */
@@ -271,7 +361,7 @@ export const followApi = {
   /* Get follower and following counts for a user */
   getCounts:    (userId)                  => axios.get(`${API}/follows/${userId}/counts`),
 
-  /* Check if one user follows another — returns {following: true/false} */
+  /* Check if one user follows another - returns {following: true/false} */
   isFollowing:  (followerId, followingId) => axios.get(`${API}/follows/${followerId}/is-following/${followingId}`),
 
   /* Get list of mutual followers between two users */
@@ -282,7 +372,7 @@ export const followApi = {
 };
 
 /*
- * notificationApi — All API calls related to Notifications
+ * notificationApi - All API calls related to Notifications
  * Routes to: notification-service (port 8086)
  */
 export const notificationApi = {
@@ -300,44 +390,45 @@ export const notificationApi = {
 
   /* Get count of unread notifications (used for the bell badge in Navbar) */
   getUnreadCount:(userId) => axios.get(`${API}/notifications/user/${userId}/unread-count`, authHeader()),
+  getUnreadCountAdmin:(userId) => axios.get(`${API}/notifications/user/${userId}/unread-count`, adminHeader()),
 
   /* ADMIN: Send a notification to ALL users at once */
-  sendGlobal:    (message)=> axios.post(`${API}/notifications/admin/global`, { message }, authHeader()),
+  sendGlobal:    (message)=> axios.post(`${API}/notifications/admin/global`, { message }, adminHeader()),
 };
 
 /*
- * mediaApi — All API calls related to File Uploads and Stories
+ * mediaApi - All API calls related to File Uploads and Stories
  * Routes to: media-service (port 8087)
  */
 export const mediaApi = {
-  /* Upload an image or video file — returns the file URL */
-  upload:          (formData)            => axios.post(`${API}/media/upload`, formData, multipartHeader()),
+  /* Upload an image or video file - returns the file URL */
+  upload:          (formData)            => axios.post(`${API}/media/upload`, formData, { headers: { ...localServiceHeader().headers, 'Content-Type': 'multipart/form-data' } }),
 
   /* Create a new story (24-hour expiry) with media */
-  createStory:     (formData)            => axios.post(`${API}/stories`, formData, multipartHeader()),
+  createStory:     (formData)            => axios.post(`${API}/stories`, formData, { headers: { ...localServiceHeader().headers, 'Content-Type': 'multipart/form-data' } }),
 
   /* Get active stories from a list of user IDs (followed users + self) */
-  getStories:      (userIds)             => axios.post(`${API}/stories/feed`, userIds, authHeader()),
+  getStories:      (userIds)             => axios.post(`${API}/stories/feed`, userIds, localServiceHeader()),
 
   /* Get stories posted by a specific user */
-  getStoriesByUser:(userId)              => axios.get(`${API}/stories/user/${userId}`, authHeader()),
+  getStoriesByUser:(userId)              => axios.get(`${API}/stories/user/${userId}`, localServiceHeader()),
 
   /* Delete your own story */
-  deleteStory:     (storyId)             => axios.delete(`${API}/stories/${storyId}`, authHeader()),
+  deleteStory:     (storyId)             => axios.delete(`${API}/stories/${storyId}`, localServiceHeader()),
 
   /* Record that a user viewed a story (only counts if not the owner) */
-  incrementView:   (storyId, viewerUserId, viewerUsername) => axios.put(`${API}/stories/${storyId}/view?viewerUserId=${viewerUserId}&viewerUsername=${encodeURIComponent(viewerUsername || '')}`, {}, authHeader()),
+  incrementView:   (storyId, viewerUserId, viewerUsername) => axios.put(`${API}/stories/${storyId}/view?viewerUserId=${viewerUserId}&viewerUsername=${encodeURIComponent(viewerUsername || '')}`, {}, localServiceHeader()),
 
   /* Get list of users who viewed a story (only story owner can see this) */
-  getStoryViewers: (storyId) => axios.get(`${API}/stories/${storyId}/viewers`, authHeader()),
+  getStoryViewers: (storyId) => axios.get(`${API}/stories/${storyId}/viewers`, localServiceHeader()),
 };
 
 /*
- * paymentApi — All API calls related to Payments (Razorpay)
+ * paymentApi - All API calls related to Payments (Razorpay)
  * Routes to: payment-service (port 8089)
  */
 export const paymentApi = {
-  /* Create a Razorpay order — returns orderId, amount, currency, keyId */
+  /* Create a Razorpay order - returns orderId, amount, currency, keyId */
   createOrder:    (data)   => axios.post(`${API}/payments/create-order`, data, authHeader()),
 
   /* Verify payment after user completes Razorpay checkout */
@@ -348,7 +439,7 @@ export const paymentApi = {
 };
 
 /*
- * searchApi — All API calls related to Search and Hashtags
+ * searchApi - All API calls related to Search and Hashtags
  * Routes to: search-service (port 8088)
  */
 export const searchApi = {
@@ -359,5 +450,8 @@ export const searchApi = {
   getTrending:    ()              => axios.get(`${API}/hashtags/trending`),
 
   /* ADMIN: Get trending hashtags with higher limit */
-  getTrendingAdmin:(limit = 50)   => axios.get(`${API}/hashtags/trending?limit=${limit}`, authHeader()),
+  getTrendingAdmin:(limit = 50)   => axios.get(`${API}/hashtags/trending?limit=${limit}`, adminHeader()),
 };
+
+
+

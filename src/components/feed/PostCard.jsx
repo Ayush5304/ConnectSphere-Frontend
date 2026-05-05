@@ -4,7 +4,8 @@ import { useAuth } from '../../context/AuthContext';
 import { Link, useNavigate } from 'react-router-dom';
 
 const REACTIONS = ['LIKE','LOVE','HAHA','WOW','SAD','ANGRY'];
-const EMOJI = { LIKE:'Like', LOVE:'Love', HAHA:'Haha', WOW:'Wow', SAD:'Sad', ANGRY:'Angry' };
+const EMOJI = { LIKE:'👍', LOVE:'❤️', HAHA:'😂', WOW:'😮', SAD:'😢', ANGRY:'😡' };
+const REACTION_LABEL = { LIKE:'Like', LOVE:'Love', HAHA:'Haha', WOW:'Wow', SAD:'Sad', ANGRY:'Angry' };
 const REACTION_COLOR = { LIKE:'text-blue-600', LOVE:'text-red-500', HAHA:'text-yellow-500', WOW:'text-yellow-500', SAD:'text-yellow-500', ANGRY:'text-orange-500' };
 
 const VIS = {
@@ -337,9 +338,11 @@ export default function PostCard({ post, onDelete }) {
         <div className="flex items-center justify-between px-4 py-2 border-b border-neutral-100">
           <div className="flex items-center gap-1">
             {Object.keys(reactionSummary).length > 0 && (
-              <div className="flex -space-x-1">
-                {Object.keys(reactionSummary).slice(0, 3).map(type => (
-                  <span key={type} className="text-xs font-bold text-neutral-600">{EMOJI[type]}</span>
+              <div className="flex items-center gap-1">
+                {Object.entries(reactionSummary).slice(0, 3).map(([type, count]) => (
+                  <span key={type} className="rounded-full bg-neutral-100 px-2 py-0.5 text-[11px] font-bold text-neutral-600">
+                    {EMOJI[type]} {REACTION_LABEL[type]} {count}
+                  </span>
                 ))}
               </div>
             )}
@@ -362,8 +365,7 @@ export default function PostCard({ post, onDelete }) {
             onMouseLeave={() => setShowReactions(false)}
             onClick={() => isGuest ? navigate('/login') : (userReaction ? handleUnreact() : handleReact('LIKE'))}
             className={`post-action w-full ${userReaction ? REACTION_COLOR[userReaction] + ' font-semibold' : ''}`}>
-            {userReaction ? EMOJI[userReaction] : 'Like'}
-            <span className="hidden sm:inline">{userReaction ? userReaction.charAt(0) + userReaction.slice(1).toLowerCase() : 'Like'}</span>
+            <span className="inline-flex items-center justify-center gap-1">{userReaction ? <><span className="text-lg leading-none">{EMOJI[userReaction]}</span><span>{REACTION_LABEL[userReaction]}</span></> : 'Like'}</span>
           </button>
           {showReactions && !isGuest && (
             <div className="dropdown absolute bottom-10 left-0 flex gap-1 px-2 py-2 z-20"
@@ -371,8 +373,9 @@ export default function PostCard({ post, onDelete }) {
               onMouseLeave={() => setShowReactions(false)}>
               {REACTIONS.map(r => (
                 <button key={r} onClick={() => handleReact(r)}
-                  className="text-xs font-bold hover:bg-neutral-100 rounded-full px-3 py-1.5 transition-colors" title={r}>
-                  {EMOJI[r]}
+                  className="group flex flex-col items-center gap-0.5 rounded-full px-2 py-1 transition hover:-translate-y-1 hover:bg-white hover:shadow-lg" title={REACTION_LABEL[r]}>
+                  <span className="text-2xl leading-none">{EMOJI[r]}</span>
+                  <span className="text-[10px] font-bold text-neutral-500">{REACTION_LABEL[r]}</span>
                 </button>
               ))}
             </div>
@@ -455,8 +458,8 @@ export default function PostCard({ post, onDelete }) {
                     <span className="text-xs text-gray-400">{timeAgo(c.createdAt)}</span>
                     {!isGuest && (
                       <button onClick={() => handleCommentLike(c.commentId)}
-                        className={`text-xs font-semibold ${commentLikes[c.commentId] ? 'text-blue-600' : 'text-gray-500 hover:text-blue-600'}`}>
-                        👍 Like
+                        className={`text-xs font-semibold inline-flex items-center gap-1 ${commentLikes[c.commentId] ? 'text-blue-600' : 'text-gray-500 hover:text-blue-600'}`}>
+                        <span>{commentLikes[c.commentId] ? '👍' : ''}</span><span>Like</span>
                       </button>
                     )}
                     {!isGuest && (

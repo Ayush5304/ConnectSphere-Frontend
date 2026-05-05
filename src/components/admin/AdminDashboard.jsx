@@ -1,16 +1,19 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { authApi, postApi, notificationApi, commentApi, searchApi } from '../../api';
+import { useNavigate, useParams } from 'react-router-dom';
+import { authApi, postApi, notificationApi, commentApi, searchApi, hasValidToken } from '../../api';
 import { useAuth } from '../../context/AuthContext';
 
 const TABS = [
-  { id: 'overview', label: 'Overview' },
-  { id: 'reports', label: 'Reports' },
-  { id: 'users', label: 'Users' },
-  { id: 'posts', label: 'Posts' },
-  { id: 'comments', label: 'Comments' },
-  { id: 'trends', label: 'Hashtags' },
-  { id: 'broadcast', label: 'Broadcast' },
+  { id: 'overview', label: 'Dashboard', path: '/admin' },
+  { id: 'users', label: 'Users Management', path: '/admin/users' },
+  { id: 'posts', label: 'Posts Management', path: '/admin/posts' },
+  { id: 'comments', label: 'Comments Moderation', path: '/admin/comments' },
+  { id: 'reports', label: 'Reports', path: '/admin/reports' },
+  { id: 'broadcast', label: 'Notifications', path: '/admin/notifications' },
+  { id: 'stories', label: 'Stories', path: '/admin/stories' },
+  { id: 'trends', label: 'Hashtags / Trends', path: '/admin/trends' },
+  { id: 'analytics', label: 'Analytics', path: '/admin/analytics' },
+  { id: 'settings', label: 'Settings', path: '/admin/settings' },
 ];
 
 function cx(...classes) {
@@ -50,7 +53,7 @@ function EmptyState({ text }) {
 }
 
 export default function AdminDashboard() {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [tab, setTab] = useState('overview');
   const [users, setUsers] = useState([]);
@@ -61,13 +64,18 @@ export default function AdminDashboard() {
   const [reportedUsers, setReportedUsers] = useState([]);
   const [trending, setTrending] = useState([]);
   const [analytics, setAnalytics] = useState({});
+  const [notificationCount, setNotificationCount] = useState(0);
   const [globalMsg, setGlobalMsg] = useState('');
   const [sent, setSent] = useState(false);
   const [loading, setLoading] = useState(false);
   const [notice, setNotice] = useState('');
 
   useEffect(() => {
-    if (!user || user.role !== 'ADMIN') {
+    if (!user) {
+      navigate('/login');
+      return;
+    }
+    if (user.role !== 'ADMIN') {
       navigate('/');
       return;
     }
@@ -75,6 +83,12 @@ export default function AdminDashboard() {
   }, [user, navigate]);
 
   const refreshAll = async () => {
+    if (!hasValidToken()) {
+      setNotice('Your admin session has expired. Please log in as admin again.');
+      logout();
+      navigate('/login', { replace: true });
+      return;
+    }
     setLoading(true);
     setNotice('');
     try {
@@ -111,6 +125,32 @@ export default function AdminDashboard() {
       if (commentReports.status === 'fulfilled') setReportedComments(commentReports.value.data || []);
       if (userReports.status === 'fulfilled') setReportedUsers(userReports.value.data || []);
       if (hashtagsResult.status === 'fulfilled') setTrending(hashtagsResult.value.data || []);
+      if (notificationResult.status === 'fulfilled') setNotificationCount(notificationResult.value.data?.count || 0);
+
+      const settled = [
+        ['auth analytics', authAnalytics],
+        ['post analytics', postAnalytics],
+        ['users', usersResult],
+        ['posts', postsResult],
+        ['comments', commentsResult],
+        ['post reports', postReports],
+        ['comment reports', commentReports],
+        ['user reports', userReports],
+        ['hashtags', hashtagsResult],
+        ['notifications', notificationResult],
+      ];
+      const unauthorized = settled.some(([, result]) => result.status === 'rejected' && result.reason?.response?.status === 401);
+      if (unauthorized) {
+        setNotice('Your admin session expired or is invalid. Please log in with the admin email and password again.');
+        logout();
+        navigate('/login', { replace: true });
+        return;
+      }
+
+      const failed = settled.filter(([, result]) => result.status === 'rejected').map(([name]) => name);
+      if (failed.length) {
+        setNotice(`Could not load: ${failed.join(', ')}. Check that the related backend services are running.`);
+      }
     } catch {
       setNotice('Some admin data could not be loaded. Check backend services and gateway.');
     } finally {
@@ -122,6 +162,7 @@ export default function AdminDashboard() {
   const activeUsers = useMemo(() => users.filter(u => u.active).length, [users]);
   const suspendedUsers = users.length - activeUsers;
   const deletedPosts = useMemo(() => posts.filter(p => p.deleted).length, [posts]);
+  const activeTab = TABS.find(item => item.id === tab) || TABS[0];
 
   const changeRole = async (userId, role) => {
     await authApi.changeRole(userId, role);
@@ -195,8 +236,22 @@ export default function AdminDashboard() {
           backdrop-filter: blur(18px);
           border-radius: 18px;
         }
+        .admin-layout { display: grid; grid-template-columns: 280px minmax(0, 1fr); gap: 22px; align-items: start; }
+        .admin-sidebar { position: sticky; top: 88px; padding: 18px; }
+        .admin-side-button { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 12px; border-radius: 16px; padding: 12px 14px; font-size: 14px; font-weight: 900; color: rgba(255,255,255,.62); transition: background .2s ease, color .2s ease, transform .2s ease; }
+        .admin-side-button:hover { color: #fff; background: rgba(255,255,255,.1); transform: translateX(2px); }
+        .admin-side-button.is-active { background: #fff; color: #020617; box-shadow: 0 18px 50px rgba(255,255,255,.16); }
+        .admin-main { min-width: 0; }
         .admin-lift { transition: transform .22s ease, border-color .22s ease, box-shadow .22s ease; }
         .admin-lift:hover { transform: translateY(-3px); border-color: rgba(255,255,255,.26); box-shadow: 0 32px 90px rgba(0,0,0,.36); }
+        @media (max-width: 1024px) {
+          .admin-layout { grid-template-columns: 1fr; }
+          .admin-sidebar { position: static; }
+          .admin-side-list { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 8px; }
+        }
+        @media (max-width: 640px) {
+          .admin-side-list { grid-template-columns: 1fr; }
+        }
         .admin-orbit { animation: orbitPulse 5s ease-in-out infinite; }
         @keyframes orbitPulse { 0%,100% { transform: scale(1); opacity: .65; } 50% { transform: scale(1.12); opacity: 1; } }
         .admin-sheen::after {
@@ -210,7 +265,38 @@ export default function AdminDashboard() {
         @keyframes sheen { 0%, 55% { transform: translateX(-60%); } 80%, 100% { transform: translateX(60%); } }
       `}</style>
 
-      <div className="mx-auto max-w-7xl">
+      <div className="mx-auto max-w-7xl admin-layout">
+        <aside className="admin-sidebar admin-glass">
+          <div className="flex items-center gap-3 mb-5">
+            <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-pink-500 via-fuchsia-500 to-amber-400 flex items-center justify-center font-black shadow-[0_0_35px_rgba(236,72,153,.36)]">C</div>
+            <div className="min-w-0">
+              <p className="text-[10px] uppercase tracking-[0.28em] text-white/45 font-black">Admin Service</p>
+              <h2 className="font-black text-lg truncate">Control Modules</h2>
+            </div>
+          </div>
+          <div className="admin-side-list space-y-2">
+            {TABS.map(item => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => { setTab(item.id); navigate(item.path); }}
+                className={cx('admin-side-button', tab === item.id && 'is-active')}
+              >
+                <span>{item.label}</span>
+                <span className="text-xs opacity-60">{item.id === 'reports' ? reportCount : item.id === 'users' ? users.length : item.id === 'posts' ? posts.length : item.id === 'comments' ? comments.length : ''}</span>
+              </button>
+            ))}
+          </div>
+          <div className="mt-5 grid grid-cols-2 gap-2">
+            <button onClick={refreshAll} className="rounded-2xl bg-white text-slate-950 px-3 py-3 text-xs font-black hover:bg-white/90 transition-colors">
+              {loading ? 'Refreshing' : 'Refresh'}
+            </button>
+            <button onClick={() => { logout(); navigate('/login'); }} className="rounded-2xl bg-white/10 border border-white/15 px-3 py-3 text-xs font-black text-white hover:bg-white/15 transition-colors">
+              Logout
+            </button>
+          </div>
+        </aside>
+        <main className="admin-main">
         <header className="admin-glass admin-sheen p-5 sm:p-7 mb-6">
           <div className="relative z-10 flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
             <div>
@@ -224,7 +310,7 @@ export default function AdminDashboard() {
                 </div>
               </div>
               <p className="text-white/62 max-w-3xl text-sm sm:text-base">
-                Monitor users, public content, reports, notifications, hashtags, and platform health from one cinematic moderation dashboard.
+                Manage users, posts, comments, reports, notifications, stories, and platform analytics from one powerful admin control room.
               </p>
             </div>
             <div className="flex flex-wrap gap-3">
@@ -248,19 +334,13 @@ export default function AdminDashboard() {
           <StatCard label="Daily Active" value={analytics.dailyActiveUsers ?? 0} detail="Logins in the last 24 hours" tone="from-emerald-500/20" />
         </section>
 
-        <nav className="admin-glass p-2 mb-6 flex gap-2 overflow-x-auto">
-          {TABS.map(item => (
-            <button key={item.id} onClick={() => setTab(item.id)}
-              className={cx(
-                'whitespace-nowrap rounded-2xl px-4 py-2.5 text-sm font-bold transition-all',
-                tab === item.id
-                  ? 'bg-white text-slate-950 shadow-lg'
-                  : 'text-white/62 hover:text-white hover:bg-white/10'
-              )}>
-              {item.label}
-            </button>
-          ))}
-        </nav>
+        <div className="mb-5 flex items-center justify-between gap-3">
+          <div>
+            <p className="text-xs uppercase tracking-[0.26em] text-white/42 font-black">Current Module</p>
+            <h2 className="text-2xl font-black">{activeTab.label}</h2>
+          </div>
+          <span className="rounded-full border border-white/10 bg-white/8 px-4 py-2 text-xs font-black text-white/60">Live admin workspace</span>
+        </div>
 
         {tab === 'overview' && (
           <div className="grid grid-cols-1 xl:grid-cols-[1.2fr_.8fr] gap-5">
@@ -314,9 +394,11 @@ export default function AdminDashboard() {
 
         {tab === 'users' && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {users.map(item => (
-              <UserCard key={item.userId} user={item} onRole={changeRole} onToggle={toggleActive} onDelete={deleteUser} />
-            ))}
+            {users.length === 0 ? <EmptyState text="No users loaded. Press Refresh Data. If it stays empty, restart auth-service and api-gateway, then log in as admin again." /> : (
+              users.map(item => (
+                <UserCard key={item.userId} user={item} onRole={changeRole} onToggle={toggleActive} onDelete={deleteUser} />
+              ))
+            )}
           </div>
         )}
 
@@ -350,6 +432,28 @@ export default function AdminDashboard() {
           </div>
         )}
 
+        {tab === 'stories' && (
+          <EmptyState text="Stories moderation is ready for API integration. Story creation, deletion, and viewer APIs are available from the media service." />
+        )}
+
+        {tab === 'analytics' && (
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+            <MiniMetric label="Total Users" value={analytics.totalUsers ?? users.length} />
+            <MiniMetric label="Active Users" value={activeUsers} />
+            <MiniMetric label="Suspended" value={suspendedUsers} />
+            <MiniMetric label="Posts" value={analytics.totalPosts ?? posts.length} />
+            <MiniMetric label="Comments" value={analytics.totalComments ?? comments.length} />
+            <MiniMetric label="Reports" value={reportCount} />
+          </div>
+        )}
+
+        {tab === 'settings' && (
+          <div className="admin-glass p-6 max-w-2xl">
+            <h2 className="text-2xl font-black mb-2">Admin Settings</h2>
+            <p className="text-white/60 text-sm">Admin credentials are configured in backend application.yml. Restart auth-service and api-gateway after changing JWT or admin values.</p>
+          </div>
+        )}
+
         {tab === 'broadcast' && (
           <div className="admin-glass p-6 max-w-2xl">
             <h2 className="text-2xl font-black mb-2">Broadcast Notification</h2>
@@ -367,6 +471,7 @@ export default function AdminDashboard() {
             {sent && <p className="mt-3 text-sm text-emerald-200 font-bold">Broadcast sent successfully.</p>}
           </div>
         )}
+        </main>
       </div>
     </div>
   );
