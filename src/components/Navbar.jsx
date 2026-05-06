@@ -82,12 +82,35 @@ export default function Navbar() {
 
   useEffect(() => {
     if (!user || user.role === 'GUEST' || user.role === 'ADMIN') return;
-    const poll = () => notificationApi.getUnreadCount(user.userId)
+
+    const refreshUnread = () => notificationApi.getUnreadCount(user.userId)
       .then(({ data }) => setUnread(data.count || 0))
       .catch(() => {});
-    poll();
-    const iv = setInterval(poll, 30000);
-    return () => clearInterval(iv);
+
+    refreshUnread();
+    const poll = setInterval(refreshUnread, 7000);
+    window.addEventListener('focus', refreshUnread);
+
+    let stream;
+    try {
+      stream = new EventSource(notificationApi.streamUrl(user.userId));
+      stream.addEventListener('notification:new', event => {
+        try {
+          const notification = JSON.parse(event.data);
+          setUnread(value => value + 1);
+          setNotifs(prev => [notification, ...prev.filter(item => item.notificationId !== notification.notificationId)]);
+        } catch {
+          refreshUnread();
+        }
+      });
+      stream.onerror = () => refreshUnread();
+    } catch {}
+
+    return () => {
+      clearInterval(poll);
+      window.removeEventListener('focus', refreshUnread);
+      if (stream) stream.close();
+    };
   }, [user]);
 
   useEffect(() => {
@@ -112,9 +135,10 @@ export default function Navbar() {
     }
     try {
       const { data } = await notificationApi.getForUser(user.userId);
-      setNotifs(data || []);
+      const items = data || [];
+      setNotifs(items);
       setUnread(0);
-      (data || []).filter(n => !n.read).forEach(n =>
+      items.filter(n => !n.read && !n.isRead).forEach(n =>
         notificationApi.markRead(n.notificationId).catch(() => {})
       );
     } catch {}
@@ -205,19 +229,24 @@ export default function Navbar() {
                                 <p className="text-sm font-semibold text-neutral-500">No notifications yet</p>
                                 <p className="text-xs text-neutral-400 mt-1">Activity will appear here.</p>
                               </div>
-                            ) : notifs.map(n => (
-                              <div key={n.notificationId} className={`flex gap-3 px-4 py-3 border-b border-neutral-50 hover:bg-neutral-50 ${!n.read ? 'bg-blue-50/45' : ''}`}>
-                                <div className="avatar w-9 h-9 text-xs">{String(n.type || 'N')[0]}</div>
-                                <div className="min-w-0 flex-1">
-                                  <p className="text-sm text-neutral-800 leading-snug">{n.message}</p>
-                                  <p className="text-xs text-neutral-400 mt-1">{new Date(n.createdAt).toLocaleString()}</p>
-                                  {n.deepLink && !n.deepLink.endsWith('/') && (
-                                    <a href={n.deepLink} className="text-xs font-bold text-blue-500 hover:underline">View</a>
-                                  )}
+                            ) : notifs.map(n => {
+                              const unreadItem = !n.read && !n.isRead;
+                              const isBroadcast = n.type === 'GLOBAL';
+                              return (
+                                <div key={n.notificationId} className={`flex gap-3 px-4 py-3 border-b border-neutral-50 hover:bg-neutral-50 ${unreadItem ? 'bg-blue-50/45' : ''}`}>
+                                  <div className={`avatar w-9 h-9 text-xs ${isBroadcast ? 'g-primary' : ''}`}>{isBroadcast ? 'C' : String(n.type || 'N')[0]}</div>
+                                  <div className="min-w-0 flex-1">
+                                    {isBroadcast && <p className="text-xs font-black uppercase tracking-wide text-blue-500 mb-0.5">ConnectSphere Broadcast</p>}
+                                    <p className="text-sm text-neutral-800 leading-snug">{n.message}</p>
+                                    <p className="text-xs text-neutral-400 mt-1">{new Date(n.createdAt).toLocaleString()}</p>
+                                    {n.deepLink && !n.deepLink.endsWith('/') && (
+                                      <a href={n.deepLink} className="text-xs font-bold text-blue-500 hover:underline">View</a>
+                                    )}
+                                  </div>
+                                  {unreadItem && <span className="w-2 h-2 mt-2 rounded-full bg-blue-500 flex-shrink-0" />}
                                 </div>
-                                {!n.read && <span className="w-2 h-2 mt-2 rounded-full bg-blue-500 flex-shrink-0" />}
-                              </div>
-                            ))}
+                              );
+                            })}
                           </div>
                         </div>
                       )}

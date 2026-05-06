@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { commentApi, likeApi, postApi, mediaApi, searchApi, resolveMediaUrl } from '../../api';
+import { commentApi, likeApi, postApi, mediaApi, searchApi, authApi, resolveMediaUrl } from '../../api';
 import { useAuth } from '../../context/AuthContext';
 import { Link, useNavigate } from 'react-router-dom';
+import Avatar from '../ui/Avatar';
 
 const REACTIONS = ['LIKE','LOVE','HAHA','WOW','SAD','ANGRY'];
 const EMOJI = { LIKE:'👍', LOVE:'❤️', HAHA:'😂', WOW:'😮', SAD:'😢', ANGRY:'😡' };
@@ -60,6 +61,10 @@ export default function PostCard({ post, onDelete }) {
   const [reportReason, setReportReason]       = useState('');
   const [reported, setReported]               = useState(false);
   const [showOptions, setShowOptions]         = useState(false);
+  const [author, setAuthor]                   = useState(null);
+  const [saved, setSaved]                     = useState(() => {
+    try { return JSON.parse(localStorage.getItem('savedPosts') || '[]').includes(post.postId); } catch { return false; }
+  });
   const [editingCommentId, setEditingCommentId] = useState(null);
   const [editingCommentText, setEditingCommentText] = useState('');
   const [commentLikes, setCommentLikes]       = useState({});
@@ -70,6 +75,7 @@ export default function PostCard({ post, onDelete }) {
   const optionsRef  = useRef();
 
   useEffect(() => {
+    authApi.getUserById(post.userId).then(({ data }) => setAuthor(data)).catch(() => setAuthor(null));
     likeApi.getReactionSummary(post.postId, 'POST')
       .then(({ data }) => {
         setReactionSummary(data);
@@ -229,17 +235,35 @@ export default function PostCard({ post, onDelete }) {
     setHashtagLoading(false);
   };
 
+  const toggleSave = () => {
+    if (isGuest) { navigate('/login'); return; }
+    let savedIds = [];
+    try { savedIds = JSON.parse(localStorage.getItem('savedPosts') || '[]'); } catch {}
+    const next = saved ? savedIds.filter(id => id !== post.postId) : [...new Set([...savedIds, post.postId])];
+    localStorage.setItem('savedPosts', JSON.stringify(next));
+    setSaved(!saved);
+  };
+
+  const sharePost = async () => {
+    const url = `${window.location.origin}/profile/${post.userId}?post=${post.postId}`;
+    if (navigator.share) {
+      await navigator.share({ title: 'ConnectSphere post', text: post.content || 'View this post', url }).catch(() => {});
+    } else {
+      await navigator.clipboard?.writeText(url).catch(() => {});
+    }
+  };
+
   const vis = VIS[post.visibility] || VIS.PUBLIC;
   const postMediaUrl = resolveMediaUrl(post.mediaUrl);
+  const authorName = author?.fullName || post.fullName || post.username;
+  const authorAvatar = author?.profilePicture || post.profilePicture || post.avatarUrl;
 
   return (
     <article className="card cinema-card-hover mb-4 overflow-hidden">
       {/* Header */}
       <div className="flex items-center gap-3 px-4 py-3">
         <Link to={`/profile/${post.userId}`} className="flex-shrink-0">
-          <div className="avatar w-10 h-10 text-sm">
-            {post.username?.[0]?.toUpperCase()}
-          </div>
+          <Avatar src={authorAvatar} name={authorName} username={post.username} className="w-10 h-10 text-sm" />
         </Link>
         <div className="flex-1 min-w-0">
           <Link to={`/profile/${post.userId}`} className="font-bold text-neutral-950 hover:underline text-sm">
@@ -341,12 +365,12 @@ export default function PostCard({ post, onDelete }) {
               <div className="flex items-center gap-1">
                 {Object.entries(reactionSummary).slice(0, 3).map(([type, count]) => (
                   <span key={type} className="rounded-full bg-neutral-100 px-2 py-0.5 text-[11px] font-bold text-neutral-600">
-                    {EMOJI[type]} {REACTION_LABEL[type]} {count}
+                    {EMOJI[type]} {count}
                   </span>
                 ))}
               </div>
             )}
-            {likesCount > 0 && <span className="text-xs text-neutral-500 ml-1">{likesCount}</span>}
+            {likesCount > 0 && <span className="text-xs text-neutral-500 ml-1">{likesCount} reaction{likesCount !== 1 ? 's' : ''}</span>}
           </div>
           {commentsCount > 0 && (
             <button onClick={loadComments} className="text-xs text-neutral-500 hover:underline">
@@ -386,6 +410,12 @@ export default function PostCard({ post, onDelete }) {
         <button onClick={loadComments} className="post-action flex-1">
           Comment
         </button>
+              <button onClick={toggleSave} className={`post-action flex-1 ${saved ? 'text-blue-600 font-semibold' : ''}`}>
+          {saved ? 'Saved' : 'Save'}
+        </button>
+        <button onClick={sharePost} className="post-action flex-1">
+          Share
+        </button>
       </div>
 
       {/* Report form */}
@@ -414,11 +444,7 @@ export default function PostCard({ post, onDelete }) {
             </div>
           ) : (
             <form onSubmit={handleComment} className="flex gap-2 items-center">
-              <div className="avatar w-8 h-8 text-xs flex-shrink-0">
-                {user.profilePicture
-                  ? <img src={user.profilePicture} alt="" className="w-full h-full object-cover" />
-                  : user.username?.[0]?.toUpperCase()}
-              </div>
+              <Avatar src={user.profilePicture} name={user.fullName || user.username} className="w-8 h-8 text-xs flex-shrink-0" />
               <div className="flex-1 relative">
                 <input className="input-field py-2 text-sm pr-12"
                   placeholder="Write a comment..."
@@ -435,7 +461,7 @@ export default function PostCard({ post, onDelete }) {
           {comments.map(c => (
             <div key={c.commentId}>
               <div className="flex gap-2">
-                <div className="avatar w-8 h-8 text-xs flex-shrink-0">{c.username?.[0]?.toUpperCase()}</div>
+                <Avatar name={c.username} className="w-8 h-8 text-xs flex-shrink-0" />
                 <div className="flex-1">
                   {editingCommentId === c.commentId ? (
                     <div className="flex gap-2 items-center">
@@ -492,7 +518,7 @@ export default function PostCard({ post, onDelete }) {
                 <div className="ml-10 mt-2 space-y-2">
                   {(replies[c.commentId] || []).map(r => (
                     <div key={r.commentId} className="flex gap-2">
-                      <div className="avatar w-7 h-7 text-xs flex-shrink-0">{r.username?.[0]?.toUpperCase()}</div>
+                      <Avatar name={r.username} className="w-7 h-7 text-xs flex-shrink-0" />
                       <div className="flex-1">
                         <div className="bg-gray-100 rounded-2xl px-3 py-2 inline-block">
                           <p className="font-semibold text-gray-900 text-xs">{r.username}</p>

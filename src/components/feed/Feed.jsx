@@ -5,6 +5,7 @@ import { Link } from 'react-router-dom';
 import StoriesBar from '../stories/StoriesBar';
 import CreatePost from './CreatePost';
 import PostCard from './PostCard';
+import Avatar from '../ui/Avatar';
 
 function SkeletonCard() {
   return (
@@ -35,36 +36,35 @@ export default function Feed() {
 
   const isGuest = !user || user.role === 'GUEST';
 
+  const normalizeFeedPosts = (items = []) => {
+    const map = new Map();
+    items
+      .filter(Boolean)
+      .filter(post => !post.deleted && post.visibility !== 'PRIVATE')
+      .forEach(post => map.set(post.postId, post));
+    return Array.from(map.values()).sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+  };
+
   const loadFeed = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
+      const publicRequest = postApi.getFeed().catch(() => ({ data: [] }));
+
       if (isGuest) {
-        const { data } = await postApi.getFeed();
-        setPosts(Array.isArray(data) ? data : []);
+        const { data } = await publicRequest;
+        setPosts(normalizeFeedPosts(Array.isArray(data) ? data : []));
       } else {
-        let feedPosts = [];
+        let personalPosts = [];
         try {
           const { data: followingIds } = await followApi.getFollowing(user.userId);
-          const ids = Array.isArray(followingIds) ? followingIds : [];
-          if (!ids.includes(Number(user.userId)) && !ids.includes(String(user.userId))) ids.push(Number(user.userId));
-
-          if (ids.length > 0) {
-            const { data } = await postApi.getFeedForUsers(ids);
-            feedPosts = Array.isArray(data) ? data : [];
-          }
+          const ids = Array.from(new Set([...(Array.isArray(followingIds) ? followingIds : []), Number(user.userId)]));
+          const { data } = await postApi.getFeedForUsers(ids);
+          personalPosts = Array.isArray(data) ? data : [];
         } catch {}
 
-        if (feedPosts.length === 0) {
-          try {
-            const { data } = await postApi.getFeed();
-            feedPosts = Array.isArray(data) ? data : [];
-          } catch {
-            feedPosts = [];
-          }
-        }
-
-        setPosts(feedPosts);
+        const { data: publicPosts } = await publicRequest;
+        setPosts(normalizeFeedPosts([...personalPosts, ...(Array.isArray(publicPosts) ? publicPosts : [])]));
       }
     } catch {
       setError('Could not load feed. Please try again.');
@@ -93,7 +93,10 @@ export default function Feed() {
     }
   }, [loadFeed, isGuest, user]);
 
-  const handleCreated = (post) => setPosts(prev => [post, ...prev]);
+  const handleCreated = (post) => {
+    if (!post) return loadFeed();
+    setPosts(prev => [post, ...prev.filter(item => item.postId !== post.postId)]);
+  };
 
   const handleDelete = async (postId) => {
     try { await postApi.delete(postId); } catch {}
@@ -117,11 +120,7 @@ export default function Feed() {
               <div className="feed-spotlight-content">
                 <div className="flex items-center gap-4">
                   <div className="story-ring flex-shrink-0">
-                    <div className="avatar w-16 h-16 border-2 border-white text-xl">
-                      {user?.profilePicture
-                        ? <img src={user.profilePicture} alt="" className="w-full h-full object-cover" />
-                        : user?.username?.[0]?.toUpperCase()}
-                    </div>
+                    <Avatar src={user?.profilePicture} name={user?.fullName || user?.username} className="w-16 h-16 border-2 border-white text-xl" />
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="text-xs font-black uppercase tracking-[0.18em] text-white/50">Now streaming</p>
@@ -198,11 +197,7 @@ export default function Feed() {
               <div className="px-1">
                 <Link to={`/profile/${user?.userId}`} className="flex items-center gap-3 group">
                   <div className="story-ring">
-                    <div className="avatar w-14 h-14 text-base border-2 border-white">
-                      {user?.profilePicture
-                        ? <img src={user.profilePicture} alt="" className="w-full h-full object-cover" />
-                        : user?.username?.[0]?.toUpperCase()}
-                    </div>
+                    <Avatar src={user?.profilePicture} name={user?.fullName || user?.username} className="w-14 h-14 text-base border-2 border-white" />
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="font-black text-sm truncate group-hover:text-blue-500">{user?.username}</p>
@@ -221,10 +216,8 @@ export default function Feed() {
                   <div className="space-y-3">
                     {suggestions.map(item => (
                       <div key={item.userId} className="flex items-center gap-3">
-                        <Link to={`/profile/${item.userId}`} className="avatar w-10 h-10 text-xs">
-                          {item.profilePicture
-                            ? <img src={item.profilePicture} alt="" className="w-full h-full object-cover" />
-                            : item.username?.[0]?.toUpperCase()}
+                        <Link to={`/profile/${item.userId}`}>
+                          <Avatar src={item.profilePicture} name={item.fullName || item.username} className="w-10 h-10 text-xs" />
                         </Link>
                         <Link to={`/profile/${item.userId}`} className="min-w-0 flex-1">
                           <p className="text-sm font-bold truncate">{item.fullName || item.username}</p>

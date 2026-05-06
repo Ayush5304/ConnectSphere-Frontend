@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+﻿import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { authApi, postApi, notificationApi, commentApi, searchApi, hasValidToken } from '../../api';
 import { useAuth } from '../../context/AuthContext';
@@ -102,6 +102,7 @@ export default function AdminDashboard() {
         commentReports,
         userReports,
         hashtagsResult,
+        notificationResult,
       ] = await Promise.allSettled([
         authApi.authAnalytics(),
         postApi.adminAnalytics(),
@@ -112,6 +113,7 @@ export default function AdminDashboard() {
         commentApi.adminGetReported(),
         authApi.getReportedUsers(),
         searchApi.getTrendingAdmin(20),
+        user?.userId ? notificationApi.getUnreadCountAdmin(user.userId) : Promise.resolve({ data: { count: 0 } }),
       ]);
 
       setAnalytics({
@@ -210,10 +212,14 @@ export default function AdminDashboard() {
 
   const sendGlobal = async () => {
     if (!globalMsg.trim()) return;
-    await notificationApi.sendGlobal(globalMsg);
-    setSent(true);
-    setGlobalMsg('');
-    setTimeout(() => setSent(false), 3000);
+    try {
+      const { data } = await notificationApi.sendGlobal(globalMsg.trim(), user?.userId);
+      setSent(data?.created != null ? `Broadcast sent to ${data.created} user${data.created === 1 ? '' : 's'}.` : 'Broadcast sent successfully.');
+      setGlobalMsg('');
+      setTimeout(() => setSent(false), 4000);
+    } catch (err) {
+      setNotice(err.message || 'Could not send broadcast notification.');
+    }
   };
 
   return (
@@ -468,7 +474,7 @@ export default function AdminDashboard() {
               className="mt-4 w-full rounded-2xl bg-gradient-to-r from-pink-500 via-fuchsia-500 to-amber-400 px-5 py-3 text-sm font-black text-white shadow-[0_18px_45px_rgba(236,72,153,.3)] hover:opacity-95 transition-opacity">
               Send Broadcast
             </button>
-            {sent && <p className="mt-3 text-sm text-emerald-200 font-bold">Broadcast sent successfully.</p>}
+            {sent && <p className="mt-3 text-sm text-emerald-200 font-bold">{sent}</p>}
           </div>
         )}
         </main>
@@ -515,7 +521,7 @@ function UserCard({ user, onRole, onToggle, onDelete }) {
             <Pill tone={user.role === 'ADMIN' ? 'bg-pink-500/20 text-pink-100' : 'bg-white/10 text-white/70'}>{user.role}</Pill>
             <Pill tone={user.active ? 'bg-emerald-500/18 text-emerald-100' : 'bg-rose-500/18 text-rose-100'}>{user.active ? 'Active' : 'Suspended'}</Pill>
           </div>
-          <p className="text-white/45 text-sm">@{user.username} · {user.email}</p>
+          <p className="text-white/45 text-sm">@{user.username} Â· {user.email}</p>
           {user.reported && <p className="mt-2 text-rose-100 text-sm">Reported: {user.reportReason}</p>}
         </div>
       </div>
@@ -539,12 +545,12 @@ function PostAdminCard({ post, onDelete }) {
             {post.reported && <Pill tone="bg-rose-500/18 text-rose-100">Reported</Pill>}
             {post.deleted && <Pill tone="bg-slate-500/30 text-slate-100">Deleted</Pill>}
           </div>
-          <p className="text-white/55 text-xs font-bold">@{post.username} · {formatDate(post.createdAt)}</p>
+          <p className="text-white/55 text-xs font-bold">@{post.username} Â· {formatDate(post.createdAt)}</p>
         </div>
         <ActionButton onClick={() => onDelete(post.postId)} danger>Remove</ActionButton>
       </div>
       <p className="mt-4 text-white/82 leading-relaxed">{post.content || 'Media-only post'}</p>
-      <p className="mt-4 text-white/42 text-xs">{post.likesCount || 0} reactions · {post.commentsCount || 0} comments</p>
+      <p className="mt-4 text-white/42 text-xs">{post.likesCount || 0} reactions Â· {post.commentsCount || 0} comments</p>
     </div>
   );
 }
@@ -555,7 +561,7 @@ function CommentAdminCard({ comment, onDelete }) {
       <div>
         <p className="font-black">@{comment.username} {comment.parentCommentId && <span className="text-white/40 font-medium">reply</span>}</p>
         <p className="text-white/70 text-sm mt-1">{comment.content}</p>
-        <p className="text-white/35 text-xs mt-2">Post #{comment.postId} · {formatDate(comment.createdAt)}</p>
+        <p className="text-white/35 text-xs mt-2">Post #{comment.postId} Â· {formatDate(comment.createdAt)}</p>
       </div>
       <ActionButton onClick={() => onDelete(comment.commentId)} danger>Delete</ActionButton>
     </div>
@@ -567,7 +573,7 @@ function ReportUserCard({ user, onClear, onDelete }) {
     <div className="admin-glass p-4">
       <p className="text-xs text-rose-100 font-black uppercase tracking-[0.2em]">Account Report</p>
       <h3 className="text-lg font-black mt-1">{user.fullName || user.username}</h3>
-      <p className="text-white/45 text-sm">@{user.username} · {user.email}</p>
+      <p className="text-white/45 text-sm">@{user.username} Â· {user.email}</p>
       <p className="text-white/75 text-sm mt-3">{user.reportReason || 'No reason provided.'}</p>
       <div className="mt-4 flex gap-2">
         <ActionButton onClick={() => onClear(user.userId)}>Clear</ActionButton>
@@ -606,3 +612,5 @@ function ReportCommentCard({ comment, onClear, onDelete, compact }) {
     </div>
   );
 }
+
+

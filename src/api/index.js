@@ -376,8 +376,11 @@ export const followApi = {
  * Routes to: notification-service (port 8086)
  */
 export const notificationApi = {
+  create:        (data)   => axios.post(`${API}/notifications`, data, localServiceHeader()),
+
   /* Get all notifications for a user */
   getForUser:    (userId) => axios.get(`${API}/notifications/user/${userId}`, authHeader()),
+  streamUrl:     (userId) => `${API}/notifications/user/${userId}/stream`,
 
   /* Mark a single notification as read */
   markRead:      (id)     => axios.put(`${API}/notifications/${id}/read`, {}, authHeader()),
@@ -393,7 +396,7 @@ export const notificationApi = {
   getUnreadCountAdmin:(userId) => axios.get(`${API}/notifications/user/${userId}/unread-count`, adminHeader()),
 
   /* ADMIN: Send a notification to ALL users at once */
-  sendGlobal:    (message)=> axios.post(`${API}/notifications/admin/global`, { message }, adminHeader()),
+  sendGlobal:    (message, adminId)=> axios.post(`${API}/notifications/admin/global`, { message, adminId }, adminHeader()),
 };
 
 /*
@@ -414,7 +417,9 @@ export const mediaApi = {
   getStoriesByUser:(userId)              => axios.get(`${API}/stories/user/${userId}`, localServiceHeader()),
 
   /* Delete your own story */
-  deleteStory:     (storyId)             => axios.delete(`${API}/stories/${storyId}`, localServiceHeader()),
+  deleteStory:     (storyId, requesterUserId, requesterRole) => axios.delete(`${API}/stories/${storyId}?requesterUserId=${requesterUserId || ''}&requesterRole=${encodeURIComponent(requesterRole || '')}`, localServiceHeader()),
+
+  reportStory:     (storyId, reason)    => axios.post(`${API}/stories/${storyId}/report`, { reason }, localServiceHeader()),
 
   /* Record that a user viewed a story (only counts if not the owner) */
   incrementView:   (storyId, viewerUserId, viewerUsername) => axios.put(`${API}/stories/${storyId}/view?viewerUserId=${viewerUserId}&viewerUsername=${encodeURIComponent(viewerUsername || '')}`, {}, localServiceHeader()),

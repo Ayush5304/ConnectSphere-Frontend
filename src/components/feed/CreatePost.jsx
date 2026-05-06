@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { postApi, mediaApi } from '../../api';
+import Avatar from '../ui/Avatar';
 import { useAuth } from '../../context/AuthContext';
 
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'video/mp4'];
@@ -79,7 +80,7 @@ export default function CreatePost({ onCreated }) {
         visibility,
         mediaUrl,
       });
-      onCreated(data);
+      onCreated?.(data);
       closeComposer();
     } catch (err) {
       setUploading(false);
@@ -102,11 +103,7 @@ export default function CreatePost({ onCreated }) {
 
       <div className="p-4">
         <div className="flex items-center gap-3">
-          <div className="avatar w-11 h-11 text-sm">
-            {user?.profilePicture
-              ? <img src={user.profilePicture} alt="" className="w-full h-full object-cover" />
-              : user?.username?.[0]?.toUpperCase()}
-          </div>
+          <Avatar src={user?.profilePicture} name={user?.fullName || user?.username} className="w-11 h-11 text-sm" />
           <button
             type="button"
             onClick={() => { setExpanded(true); setTimeout(() => textRef.current?.focus(), 50); }}
