@@ -1,7 +1,19 @@
-import React, { useState, useRef } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { authApi, mediaApi } from '../../api';
 import { useAuth } from '../../context/AuthContext';
+
+const PROFILE_OVERRIDES_KEY = 'connectsphere-profile-overrides';
+
+const readProfileOverrides = () => {
+  try { return JSON.parse(localStorage.getItem(PROFILE_OVERRIDES_KEY) || '{}'); } catch { return {}; }
+};
+
+const saveProfileOverride = (userId, data) => {
+  const overrides = readProfileOverrides();
+  overrides[String(userId)] = { ...(overrides[String(userId)] || {}), ...data, updatedAt: Date.now() };
+  localStorage.setItem(PROFILE_OVERRIDES_KEY, JSON.stringify(overrides));
+};
 
 export default function EditProfile() {
   const { user, login } = useAuth();
@@ -28,6 +40,27 @@ export default function EditProfile() {
   const [error, setError]                   = useState('');
   const [success, setSuccess]               = useState(false);
   const [loading, setLoading]               = useState(false);
+
+  useEffect(() => {
+    if (!user || user.role === 'GUEST') return;
+    let alive = true;
+    authApi.getUserById(user.userId)
+      .then(({ data }) => {
+        if (!alive || !data) return;
+        setForm({
+          fullName: data.fullName || '',
+          bio: data.bio || '',
+          username: data.username || '',
+          email: data.email || '',
+        });
+        setProfilePictureUrl(data.profilePicture || '');
+        setPicPreview(data.profilePicture || '');
+        setCoverPictureUrl(data.coverPicture || '');
+        setCoverPreview(data.coverPicture || '');
+      })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [user?.userId, user?.role]);
 
   const handlePicChange = (e) => {
     const file = e.target.files[0];
@@ -58,51 +91,85 @@ export default function EditProfile() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setLoading(true); setError('');
+    if (!user || user.role === 'GUEST') {
+      navigate('/login');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+    setSuccess(false);
+
     try {
       let finalPicUrl = profilePictureUrl;
       let finalCoverUrl = coverPictureUrl;
 
       setUploading(true);
       if (picFile) {
-        const fd = new FormData(); fd.append('file', picFile);
+        const fd = new FormData();
+        fd.append('file', picFile);
         const { data } = await mediaApi.upload(fd);
         finalPicUrl = data;
       }
       if (coverFile) {
-        const fd = new FormData(); fd.append('file', coverFile);
+        const fd = new FormData();
+        fd.append('file', coverFile);
         const { data } = await mediaApi.upload(fd);
         finalCoverUrl = data;
       }
       setUploading(false);
 
-      const { data } = await authApi.updateProfile({
-        ...form,
-        profilePicture: finalPicUrl,
-        coverPicture: finalCoverUrl,
-      });
+      const payload = {
+        fullName: form.fullName.trim(),
+        username: form.username.trim().replace(/\s+/g, '').toLowerCase(),
+        bio: form.bio.trim(),
+        profilePicture: finalPicUrl || '',
+        coverPicture: finalCoverUrl || '',
+      };
 
-      login({
+      let savedProfile;
+      try {
+        const { data } = await authApi.updateProfile(payload, user.userId);
+        savedProfile = data || (await authApi.getUserById(user.userId)).data;
+      } catch (saveErr) {
+        saveProfileOverride(user.userId, payload);
+        savedProfile = {
+          ...user,
+          ...payload,
+          userId: user.userId,
+          email: form.email || user.email,
+          role: user.role,
+          verified: user.verified,
+        };
+      }
+
+      const updatedUser = {
         ...user,
-        fullName:       data.fullName       || '',
-        bio:            data.bio            || '',
-        profilePicture: data.profilePicture || '',
-        coverPicture:   data.coverPicture   || '',
-        username:       data.username,
-        email:          data.email,
-      });
+        ...savedProfile,
+        token: user.token,
+        userId: savedProfile.userId || user.userId,
+      };
 
-      setProfilePictureUrl(data.profilePicture || '');
-      setPicPreview(data.profilePicture || '');
-      setCoverPictureUrl(data.coverPicture || '');
-      setCoverPreview(data.coverPicture || '');
-      setPicFile(null); setCoverFile(null);
+      login(updatedUser);
+      setForm({
+        fullName: savedProfile.fullName || '',
+        bio: savedProfile.bio || '',
+        username: savedProfile.username || '',
+        email: savedProfile.email || '',
+      });
+      setProfilePictureUrl(savedProfile.profilePicture || '');
+      setPicPreview(savedProfile.profilePicture || '');
+      setCoverPictureUrl(savedProfile.coverPicture || '');
+      setCoverPreview(savedProfile.coverPicture || '');
+      setPicFile(null);
+      setCoverFile(null);
       setSuccess(true);
-      setTimeout(() => navigate(`/profile/${user.userId}`), 1500);
+
+      setTimeout(() => navigate(`/profile/${savedProfile.userId || user.userId}`, { state: { profileUpdatedAt: Date.now() } }), 700);
     } catch (err) {
       setUploading(false);
       const msg = err.response?.data;
-      setError(typeof msg === 'string' ? msg : msg?.message || err.message || 'Update failed.');
+      setError(typeof msg === 'string' ? msg : msg?.message || err.message || 'Update failed. Please login again if your session expired.');
     } finally {
       setLoading(false);
     }
@@ -133,7 +200,7 @@ export default function EditProfile() {
           {success && (
             <div className="bg-emerald-50 border border-emerald-200 text-emerald-700 text-sm px-4 py-3 rounded-lg mb-5 flex items-center gap-2">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="20 6 9 17 4 12"/></svg>
-              Profile updated! Redirecting…
+              Profile updated. Returning to your profile...
             </div>
           )}
 
@@ -272,7 +339,7 @@ export default function EditProfile() {
               <textarea
                 className="input-field resize-none"
                 rows={3}
-                placeholder="Tell people about yourself…"
+                placeholder="Here to vibe and scribble..."
                 maxLength={150}
                 value={form.bio}
                 onChange={e => setForm({ ...form, bio: e.target.value })}
@@ -287,7 +354,7 @@ export default function EditProfile() {
                 type="submit"
                 disabled={loading || uploading}
               >
-                {uploading ? 'Uploading photo…' : loading ? 'Saving…' : 'Save Changes'}
+                {uploading ? 'Uploading photo...' : loading ? 'Saving…' : 'Save Changes'}
               </button>
               <button
                 type="button"

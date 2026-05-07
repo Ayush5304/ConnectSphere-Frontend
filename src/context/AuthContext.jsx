@@ -44,6 +44,8 @@ export function AuthProvider({ children }) {
     if (!data || typeof data !== 'object') return data;
     return {
       ...data,
+      userId: data.userId != null ? Number(data.userId) : data.userId,
+      verified: data.verified === true || data.verified === 'true',
       profilePicture: resolveMediaUrl(data.profilePicture || ''),
       coverPicture: resolveMediaUrl(data.coverPicture || '')
     };

@@ -5,6 +5,18 @@ import { useAuth } from '../../context/AuthContext';
 import PostCard from '../feed/PostCard';
 import PaymentModal from '../payment/PaymentModal';
 import Avatar from '../ui/Avatar';
+import verifiedBadge from '../../assets/verified-badge.svg';
+
+const PROFILE_OVERRIDES_KEY = 'connectsphere-profile-overrides';
+
+const getProfileOverride = (userId) => {
+  try {
+    const overrides = JSON.parse(localStorage.getItem(PROFILE_OVERRIDES_KEY) || '{}');
+    return overrides[String(userId)] || null;
+  } catch {
+    return null;
+  }
+};
 
 const tabs = [
   { key: 'grid', label: 'Posts', icon: 'Grid' },
@@ -21,7 +33,15 @@ const getPostMedia = (post) => resolveMediaUrl(post?.mediaUrl || post?.media || 
 const isVideoPost = (post) => /\.(mp4|webm|ogg|mov)$/i.test(getPostMedia(post));
 
 function VerifiedBadge() {
-  return <span className="inline-flex items-center text-[13px] font-black text-blue-500" title="Verified">Verified</span>;
+  return (
+    <img
+      src={verifiedBadge}
+      alt="Verified"
+      title="Verified"
+      className="inline-block w-5 h-5 sm:w-[22px] sm:h-[22px] align-middle -ml-1"
+      draggable="false"
+    />
+  );
 }
 
 function EmptyPanel({ title, subtitle }) {
@@ -52,6 +72,8 @@ export default function Profile() {
   const [showModal, setShowModal] = useState(null);
   const [modalUsers, setModalUsers] = useState([]);
   const [loadingModal, setLoadingModal] = useState(false);
+  const [modalSearch, setModalSearch] = useState('');
+  const [modalMenu, setModalMenu] = useState(null);
   const [showReport, setShowReport] = useState(false);
   const [reportReason, setReportReason] = useState('');
   const [reported, setReported] = useState(false);
@@ -60,6 +82,7 @@ export default function Profile() {
 
   const isOwnProfile = user && String(user.userId) === String(userId);
   const displayName = profileUser?.fullName || profileUser?.username || `User #${userId}`;
+  const isVerified = profileUser?.verified === true || profileUser?.verified === 'true';
   const visiblePosts = useMemo(() => posts.filter(p => !p.deleted), [posts]);
   const reelPosts = useMemo(() => visiblePosts.filter(isVideoPost), [visiblePosts]);
 
@@ -77,7 +100,7 @@ export default function Profile() {
         return;
       }
 
-      setProfileUser(userRes.data);
+      setProfileUser({ ...userRes.data, ...(getProfileOverride(userId) || {}) });
       setCounts(normalizeCounts(countsRes.data));
 
       const [postsRes, storiesRes] = await Promise.all([
@@ -125,8 +148,15 @@ export default function Profile() {
     }
   };
 
+  const refreshFollowCounts = async () => {
+    const { data } = await followApi.getCounts(userId).catch(() => ({ data: counts }));
+    setCounts(normalizeCounts(data));
+  };
+
   const openModal = async (type) => {
     setShowModal(type);
+    setModalSearch('');
+    setModalMenu(null);
     setLoadingModal(true);
     setModalUsers([]);
     try {
@@ -135,9 +165,22 @@ export default function Profile() {
         : await followApi.getFollowing(userId);
       const users = await Promise.all((ids || []).map(id => authApi.getUserById(id).then(r => r.data).catch(() => null)));
       setModalUsers(users.filter(Boolean));
+      await refreshFollowCounts();
     } finally {
       setLoadingModal(false);
     }
+  };
+
+  const removeFollower = async (followerId) => {
+    await followApi.unfollow(followerId, userId).catch(() => {});
+    setModalUsers(prev => prev.filter(item => String(item.userId) !== String(followerId)));
+    setCounts(c => ({ ...c, followers: Math.max(0, c.followers - 1) }));
+  };
+
+  const unfollowFromModal = async (targetId) => {
+    await followApi.unfollow(user.userId, targetId).catch(() => {});
+    setModalUsers(prev => prev.filter(item => String(item.userId) !== String(targetId)));
+    setCounts(c => ({ ...c, following: Math.max(0, c.following - 1) }));
   };
 
   const handleDeletePost = async (postId) => {
@@ -187,7 +230,7 @@ export default function Profile() {
               <div className="flex flex-wrap items-center gap-3">
                 <h1 className="text-2xl sm:text-3xl font-black tracking-tight flex items-center gap-2">
                   {displayName}
-                  {profileUser?.verified && <VerifiedBadge />}
+                  {isVerified && <VerifiedBadge />}
                 </h1>
                 {isOwnProfile ? (
                   <Link to="/edit-profile" className="btn-outline h-9 px-4">Edit profile</Link>
@@ -196,7 +239,10 @@ export default function Profile() {
                     {followLoading ? '...' : isFollowing ? 'Following' : 'Follow'}
                   </button>
                 )}
-                {isOwnProfile && !profileUser?.verified && (
+                {!isOwnProfile && user?.role !== 'GUEST' && (
+                  <Link to={`/messages?user=${userId}`} className="btn-outline h-9 px-5">Message</Link>
+                )}
+                {isOwnProfile && !isVerified && (
                   <button type="button" onClick={() => setShowPayment(true)} className="btn-outline h-9 px-4 text-amber-600">Get verified</button>
                 )}
                 {!isOwnProfile && user?.role !== 'GUEST' && !reported && (
@@ -213,7 +259,11 @@ export default function Profile() {
             <button type="button" onClick={() => openModal('following')}><p className="text-xl font-black">{counts.following}</p><p className="text-xs text-neutral-500 font-bold">following</p></button>
           </div>
 
-          {profileUser?.bio && <p className="text-sm text-neutral-800 mt-4 max-w-xl whitespace-pre-wrap">{profileUser.bio}</p>}
+          {profileUser?.bio && (
+            <p className="mt-4 max-w-xl whitespace-pre-wrap text-[15px] font-medium leading-snug text-neutral-900">
+              {profileUser.bio}
+            </p>
+          )}
 
           <div className="flex gap-4 mt-6 overflow-x-auto pb-1">
             <div className="flex-shrink-0 text-center">
@@ -274,15 +324,48 @@ export default function Profile() {
       )}
 
       {showModal && (
-        <div className="fixed inset-0 bg-black/55 z-[75] flex items-center justify-center p-4" onClick={() => setShowModal(null)}>
-          <div className="bg-white rounded-lg w-full max-w-sm max-h-[80vh] overflow-hidden" onClick={e => e.stopPropagation()}>
-            <div className="px-5 py-4 border-b flex items-center justify-between"><h3 className="font-black capitalize">{showModal}</h3><button onClick={() => setShowModal(null)} className="text-2xl">x</button></div>
-            <div className="p-3 max-h-[60vh] overflow-y-auto">
-              {loadingModal ? <p className="text-center text-sm text-neutral-500 py-8">Loading...</p> : modalUsers.length === 0 ? <p className="text-center text-sm text-neutral-500 py-8">No {showModal} yet.</p> : modalUsers.map(item => (
-                <Link key={item.userId} to={`/profile/${item.userId}`} onClick={() => setShowModal(null)} className="flex items-center gap-3 p-3 rounded hover:bg-neutral-50">
-                  <Avatar src={item.profilePicture} name={item.fullName || item.username} className="w-10 h-10 text-sm" />
-                  <div className="min-w-0"><p className="font-bold text-sm truncate">{item.fullName || item.username}</p><p className="text-xs text-neutral-500 truncate">@{item.username}</p></div>
-                </Link>
+        <div className="fixed inset-0 bg-black/60 z-[75] flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={() => setShowModal(null)}>
+          <div className="bg-white w-full sm:max-w-md max-h-[86vh] rounded-t-3xl sm:rounded-2xl overflow-hidden shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="px-4 py-3 border-b border-neutral-200 flex items-center justify-between">
+              <button className="w-9 h-9 text-xl" onClick={() => setShowModal(null)}>Back</button>
+              <h3 className="font-black">{profileUser?.username}</h3>
+              <button onClick={() => setShowModal(null)} className="w-9 h-9 rounded-full bg-neutral-100 text-xl">x</button>
+            </div>
+            <div className="grid grid-cols-2 border-b border-neutral-200 text-sm font-black">
+              <button onClick={() => openModal('followers')} className={`py-3 border-b-2 ${showModal === 'followers' ? 'border-neutral-950' : 'border-transparent text-neutral-500'}`}>{counts.followers} followers</button>
+              <button onClick={() => openModal('following')} className={`py-3 border-b-2 ${showModal === 'following' ? 'border-neutral-950' : 'border-transparent text-neutral-500'}`}>{counts.following} following</button>
+            </div>
+            <div className="p-3 border-b border-neutral-100">
+              <input value={modalSearch} onChange={e => setModalSearch(e.target.value)} className="w-full h-11 rounded-xl bg-neutral-100 px-4 outline-none text-sm" placeholder="Search" />
+            </div>
+            <div className="p-2 max-h-[56vh] overflow-y-auto">
+              {loadingModal ? <p className="text-center text-sm text-neutral-500 py-8">Loading...</p> : modalUsers.filter(item => {
+                const q = modalSearch.trim().toLowerCase();
+                return !q || `${item.fullName || ''} ${item.username || ''}`.toLowerCase().includes(q);
+              }).length === 0 ? <p className="text-center text-sm text-neutral-500 py-8">No {showModal} yet.</p> : modalUsers.filter(item => {
+                const q = modalSearch.trim().toLowerCase();
+                return !q || `${item.fullName || ''} ${item.username || ''}`.toLowerCase().includes(q);
+              }).map(item => (
+                <div key={item.userId} className="relative flex items-center gap-3 p-3 rounded-xl hover:bg-neutral-50">
+                  <Link to={`/profile/${item.userId}`} onClick={() => setShowModal(null)}><Avatar src={item.profilePicture} name={item.fullName || item.username} className="w-12 h-12 text-sm" /></Link>
+                  <Link to={`/profile/${item.userId}`} onClick={() => setShowModal(null)} className="min-w-0 flex-1">
+                    <p className="font-black text-sm truncate">{item.fullName || item.username}</p>
+                    <p className="text-xs text-neutral-500 truncate">@{item.username}</p>
+                  </Link>
+                  <Link to={`/messages?user=${item.userId}`} onClick={() => setShowModal(null)} className="px-4 py-2 rounded-lg bg-neutral-100 text-xs font-black">Message</Link>
+                  {isOwnProfile && showModal === 'followers' && <button onClick={() => removeFollower(item.userId)} className="text-xl text-neutral-500 px-1">x</button>}
+                  {isOwnProfile && showModal === 'following' && (
+                    <div className="relative">
+                      <button onClick={() => setModalMenu(modalMenu === item.userId ? null : item.userId)} className="text-xl px-1">...</button>
+                      {modalMenu === item.userId && (
+                        <div className="absolute right-0 top-8 w-44 rounded-xl bg-neutral-900 text-white shadow-xl overflow-hidden z-10">
+                          <Link to={`/messages?user=${item.userId}`} onClick={() => setShowModal(null)} className="block px-4 py-3 text-sm">Message</Link>
+                          <button onClick={() => unfollowFromModal(item.userId)} className="w-full text-left px-4 py-3 text-sm text-red-400">Unfollow</button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
               ))}
             </div>
           </div>

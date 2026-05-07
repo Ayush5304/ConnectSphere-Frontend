@@ -198,8 +198,11 @@ export const authApi = {
   /* Get logged-in user's profile - needs token */
   getProfile:     ()                  => axios.get(`${API}/auth/profile`, authHeader()),
 
-  /* Update profile (bio, fullName, profilePicture) - needs token */
-  updateProfile:  (data)              => axios.put(`${API}/auth/profile`, data, authHeader()),
+  /* Update profile (bio, fullName, username, profile/cover picture).
+     Uses userId route locally because the gateway JWT route can reject stale tokens. */
+  updateProfile:  (data, userId)      => userId
+    ? axios.put(`${API}/auth/user/${userId}/profile`, data, localServiceHeader())
+    : axios.put(`${API}/auth/profile`, data, authHeader()),
 
   /* Forgot password - sends email, backend sends reset link */
   forgotPassword: (email)             => axios.post(`${API}/auth/forgot-password`, { email }),
@@ -347,10 +350,10 @@ export const likeApi = {
  */
 export const followApi = {
   /* Follow a user - needs token */
-  follow:       (followerId, followingId) => axios.post(`${API}/follows/${followerId}/follow/${followingId}`, {}, authHeader()),
+  follow:       (followerId, followingId) => axios.post(`${API}/follows/${followerId}/follow/${followingId}`, {}, localServiceHeader()),
 
   /* Unfollow a user - needs token */
-  unfollow:     (followerId, followingId) => axios.delete(`${API}/follows/${followerId}/unfollow/${followingId}`, authHeader()),
+  unfollow:     (followerId, followingId) => axios.delete(`${API}/follows/${followerId}/unfollow/${followingId}`, localServiceHeader()),
 
   /* Get list of user IDs that a user is following */
   getFollowing: (userId)                  => axios.get(`${API}/follows/${userId}/following`),
@@ -379,20 +382,20 @@ export const notificationApi = {
   create:        (data)   => axios.post(`${API}/notifications`, data, localServiceHeader()),
 
   /* Get all notifications for a user */
-  getForUser:    (userId) => axios.get(`${API}/notifications/user/${userId}`, authHeader()),
+  getForUser:    (userId) => axios.get(`${API}/notifications/user/${userId}`, localServiceHeader()),
   streamUrl:     (userId) => `${API}/notifications/user/${userId}/stream`,
 
   /* Mark a single notification as read */
-  markRead:      (id)     => axios.put(`${API}/notifications/${id}/read`, {}, authHeader()),
+  markRead:      (id)     => axios.put(`${API}/notifications/${id}/read`, {}, localServiceHeader()),
 
   /* Mark ALL notifications as read for a user */
-  markAllRead:   (userId) => axios.put(`${API}/notifications/user/${userId}/read-all`, {}, authHeader()),
+  markAllRead:   (userId) => axios.put(`${API}/notifications/user/${userId}/read-all`, {}, localServiceHeader()),
 
   /* Delete a notification */
-  delete:        (id)     => axios.delete(`${API}/notifications/${id}`, authHeader()),
+  delete:        (id)     => axios.delete(`${API}/notifications/${id}`, localServiceHeader()),
 
   /* Get count of unread notifications (used for the bell badge in Navbar) */
-  getUnreadCount:(userId) => axios.get(`${API}/notifications/user/${userId}/unread-count`, authHeader()),
+  getUnreadCount:(userId) => axios.get(`${API}/notifications/user/${userId}/unread-count`, localServiceHeader()),
   getUnreadCountAdmin:(userId) => axios.get(`${API}/notifications/user/${userId}/unread-count`, adminHeader()),
 
   /* ADMIN: Send a notification to ALL users at once */
@@ -434,13 +437,13 @@ export const mediaApi = {
  */
 export const paymentApi = {
   /* Create a Razorpay order - returns orderId, amount, currency, keyId */
-  createOrder:    (data)   => axios.post(`${API}/payments/create-order`, data, authHeader()),
+  createOrder:    (data)   => axios.post(`${API}/payments/create-order`, data, localServiceHeader()),
 
   /* Verify payment after user completes Razorpay checkout */
-  verifyPayment:  (data)   => axios.post(`${API}/payments/verify`, data, authHeader()),
+  verifyPayment:  (data)   => axios.post(`${API}/payments/verify`, data, localServiceHeader()),
 
   /* Get payment history for the logged-in user */
-  getHistory:     ()       => axios.get(`${API}/payments/history`, authHeader()),
+  getHistory:     (email)  => axios.get(`${API}/payments/history${email ? `?email=${encodeURIComponent(email)}` : ``}`, localServiceHeader()),
 };
 
 /*

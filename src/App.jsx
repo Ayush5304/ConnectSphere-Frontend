@@ -26,6 +26,11 @@ import Feed from './components/feed/Feed';
 import Profile from './components/profile/Profile';
 import AdminDashboard from './components/admin/AdminDashboard';
 import EditProfile from './components/profile/EditProfile';
+import Messages from './components/messages/Messages';
+import NotificationsPage from './components/notifications/NotificationsPage';
+import Settings from './components/settings/Settings';
+import Explore from './components/explore/Explore';
+import Reels from './components/reels/Reels';
 import './index.css';
 
 /*
@@ -128,6 +133,11 @@ function AppRoutes() {
 
         {/* PRIVATE — only registered users (not guest) */}
         <Route path="/edit-profile" element={<PrivateRoute><EditProfile /></PrivateRoute>} />
+        <Route path="/messages" element={<PrivateRoute><Messages /></PrivateRoute>} />
+        <Route path="/notifications" element={<PrivateRoute><NotificationsPage /></PrivateRoute>} />
+        <Route path="/settings" element={<PrivateRoute><Settings /></PrivateRoute>} />
+        <Route path="/explore" element={<PrivateRoute><Explore /></PrivateRoute>} />
+        <Route path="/reels" element={<PrivateRoute><Reels /></PrivateRoute>} />
 
         {/* ADMIN ONLY */}
         <Route path="/admin" element={<AdminRoute><AdminDashboard /></AdminRoute>} />

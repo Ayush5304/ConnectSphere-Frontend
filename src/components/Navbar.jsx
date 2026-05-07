@@ -25,6 +25,21 @@ const HomeIcon = ({ size = 22 }) => (
   </svg>
 );
 
+
+const ReelsIcon = ({ size = 22 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="3" y="4" width="18" height="16" rx="3" />
+    <path d="m10 9 5 3-5 3V9Z" />
+  </svg>
+);
+
+const MessageIcon = ({ size = 22 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M22 2 11 13" />
+    <path d="m22 2-7 20-4-9-9-4 20-7Z" />
+  </svg>
+);
+
 const ShieldIcon = ({ size = 18 }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor">
     <path d="M12 1 4 4.5v6.2c0 5.1 3.4 9.9 8 11.3 4.6-1.4 8-6.2 8-11.3V4.5L12 1Z" />
@@ -91,20 +106,7 @@ export default function Navbar() {
     const poll = setInterval(refreshUnread, 7000);
     window.addEventListener('focus', refreshUnread);
 
-    let stream;
-    try {
-      stream = new EventSource(notificationApi.streamUrl(user.userId));
-      stream.addEventListener('notification:new', event => {
-        try {
-          const notification = JSON.parse(event.data);
-          setUnread(value => value + 1);
-          setNotifs(prev => [notification, ...prev.filter(item => item.notificationId !== notification.notificationId)]);
-        } catch {
-          refreshUnread();
-        }
-      });
-      stream.onerror = () => refreshUnread();
-    } catch {}
+    const stream = null;
 
     return () => {
       clearInterval(poll);
@@ -200,7 +202,7 @@ export default function Navbar() {
                     <div className="relative" ref={notifRef}>
                       <button
                         type="button"
-                        onClick={openNotifs}
+                        onClick={() => navigate('/notifications')}
                         className="relative w-10 h-10 rounded-full flex items-center justify-center text-neutral-700 hover:bg-neutral-100"
                         aria-label="Notifications"
                       >
@@ -279,6 +281,8 @@ export default function Navbar() {
                           <>
                             <Link to={`/profile/${user.userId}`} className="block px-4 py-2.5 text-sm hover:bg-neutral-50">Profile</Link>
                             <Link to="/edit-profile" className="block px-4 py-2.5 text-sm hover:bg-neutral-50">Edit profile</Link>
+                            <Link to="/messages" className="block px-4 py-2.5 text-sm hover:bg-neutral-50">Messages</Link>
+                            <Link to="/settings" className="block px-4 py-2.5 text-sm hover:bg-neutral-50">Settings and activity</Link>
                           </>
                         )}
                         <hr className="divider my-1" />
@@ -312,7 +316,7 @@ export default function Navbar() {
 
       {user && !(user.role === 'ADMIN' && location.pathname === '/admin') && (
         <div className="fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-neutral-200 md:hidden">
-          <div className={`${user.role === 'ADMIN' ? 'grid-cols-2' : (hideSearch ? 'grid-cols-3' : 'grid-cols-4')} grid h-14`}>
+          <div className={`${user.role === 'ADMIN' ? 'grid-cols-2' : 'grid-cols-6'} grid h-14`}>
             {user.role === 'ADMIN' ? (
               <>
                 <Link to="/admin" className="flex items-center justify-center gap-2 text-rose-600 text-xs font-black" aria-label="Admin dashboard">
@@ -332,15 +336,24 @@ export default function Navbar() {
                 <NavLink to="/" className="flex items-center justify-center text-neutral-800" aria-label="Home">
                   <HomeIcon size={23} />
                 </NavLink>
+                <NavLink to="/reels" className="flex items-center justify-center text-neutral-800" aria-label="Reels">
+                  <ReelsIcon size={23} />
+                </NavLink>
+                <NavLink to="/messages" className="flex items-center justify-center text-neutral-800 relative" aria-label="Messages">
+                  <MessageIcon size={23} />
+                </NavLink>
                 {!hideSearch && (
                   <button type="button" onClick={() => setMobileSearch(v => !v)} className="flex items-center justify-center text-neutral-800" aria-label="Search">
                     <SearchIcon size={23} />
                   </button>
                 )}
-                <button type="button" onClick={openNotifs} className="relative flex items-center justify-center text-neutral-800" aria-label="Notifications">
+                <button type="button" onClick={() => navigate('/notifications')} className="relative flex items-center justify-center text-neutral-800" aria-label="Notifications">
                   <BellIcon size={23} />
                   {unread > 0 && <span className="notif-dot top-2 right-[calc(50%-16px)]">{unread > 9 ? '9+' : unread}</span>}
                 </button>
+                <NavLink to="/explore" className="flex items-center justify-center text-neutral-800" aria-label="Explore">
+                  <SearchIcon size={23} />
+                </NavLink>
                 <Link to={`/profile/${user.userId}`} className="flex items-center justify-center" aria-label="Profile">
                   <div className="avatar w-7 h-7 text-xs">
                     {avatarSrc

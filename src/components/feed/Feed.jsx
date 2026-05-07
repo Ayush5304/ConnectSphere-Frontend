@@ -33,6 +33,9 @@ export default function Feed() {
   const [error, setError] = useState('');
   const [suggestions, setSuggestions] = useState([]);
   const [followingMap, setFollowingMap] = useState({});
+  const [followingCount, setFollowingCount] = useState(0);
+  const [showDiscover, setShowDiscover] = useState(false);
+  const [suggestionsLoading, setSuggestionsLoading] = useState(false);
 
   const isGuest = !user || user.role === 'GUEST';
 
@@ -49,22 +52,19 @@ export default function Feed() {
     setLoading(true);
     setError('');
     try {
-      const publicRequest = postApi.getFeed().catch(() => ({ data: [] }));
-
       if (isGuest) {
-        const { data } = await publicRequest;
+        const { data } = await postApi.getFeed().catch(() => ({ data: [] }));
         setPosts(normalizeFeedPosts(Array.isArray(data) ? data : []));
       } else {
-        let personalPosts = [];
-        try {
-          const { data: followingIds } = await followApi.getFollowing(user.userId);
-          const ids = Array.from(new Set([...(Array.isArray(followingIds) ? followingIds : []), Number(user.userId)]));
-          const { data } = await postApi.getFeedForUsers(ids);
-          personalPosts = Array.isArray(data) ? data : [];
-        } catch {}
+        const { data: followingIds } = await followApi.getFollowing(user.userId).catch(() => ({ data: [] }));
+        const followed = Array.isArray(followingIds) ? followingIds.map(Number).filter(Boolean) : [];
+        setFollowingCount(followed.length);
 
-        const { data: publicPosts } = await publicRequest;
-        setPosts(normalizeFeedPosts([...personalPosts, ...(Array.isArray(publicPosts) ? publicPosts : [])]));
+        const feedUserIds = Array.from(new Set([Number(user.userId), ...followed]));
+        const { data } = await postApi.getFeedForUsers(feedUserIds).catch(() => ({ data: [] }));
+        const allowedIds = new Set(feedUserIds.map(String));
+        const personalPosts = (Array.isArray(data) ? data : []).filter(post => allowedIds.has(String(post.userId)));
+        setPosts(normalizeFeedPosts(personalPosts));
       }
     } catch {
       setError('Could not load feed. Please try again.');
@@ -74,24 +74,55 @@ export default function Feed() {
     }
   }, [user, isGuest]);
 
+  const loadSuggestions = useCallback(async () => {
+    if (!user || isGuest) return;
+    setSuggestionsLoading(true);
+    try {
+      const { data: followingIds } = await followApi.getFollowing(user.userId).catch(() => ({ data: [] }));
+      const followed = new Set((Array.isArray(followingIds) ? followingIds : []).map(id => String(id)));
+
+      const { data: suggestedIds } = await followApi.getSuggestions(user.userId).catch(() => ({ data: [] }));
+      const idList = Array.isArray(suggestedIds) ? suggestedIds.filter(id => String(id) !== String(user.userId)) : [];
+      const suggestedUsers = idList.length > 0
+        ? await Promise.all(idList.map(id => authApi.getUserById(id).then(r => r.data).catch(() => null)))
+        : [];
+
+      const { data: allUsersData } = await authApi.getAllUsers().catch(() => ({ data: [] }));
+      const allUsers = Array.isArray(allUsersData) ? allUsersData : [];
+
+      const merged = new Map();
+      [...suggestedUsers, ...allUsers].filter(Boolean).forEach(item => merged.set(String(item.userId), item));
+
+      const base = Array.from(merged.values())
+        .filter(item => String(item.userId) !== String(user.userId))
+        .filter(item => item.role !== 'ADMIN' && item.role !== 'GUEST')
+        .filter(item => item.active !== false);
+
+      const statusPairs = await Promise.all(base.map(async item => {
+        if (followed.has(String(item.userId))) return [item.userId, true];
+        const { data } = await followApi.isFollowing(user.userId, item.userId).catch(() => ({ data: { following: false } }));
+        return [item.userId, Boolean(data?.following)];
+      }));
+      const statusMap = Object.fromEntries(statusPairs);
+      setFollowingMap(prev => ({ ...prev, ...statusMap }));
+
+      const cleaned = base
+        .filter(item => !statusMap[item.userId])
+        .slice(0, 12);
+
+      setSuggestions(cleaned);
+    } finally {
+      setSuggestionsLoading(false);
+    }
+  }, [user, isGuest]);
+
   useEffect(() => {
     loadFeed();
 
     if (!isGuest && user) {
-      followApi.getSuggestions(user.userId)
-        .then(({ data: ids }) => {
-          const idList = Array.isArray(ids) ? ids : [];
-          if (idList.length > 0) {
-            Promise.all(
-              idList.slice(0, 5).map(id =>
-                authApi.getUserById(id).then(r => r.data).catch(() => null)
-              )
-            ).then(items => setSuggestions(items.filter(Boolean)));
-          }
-        })
-        .catch(() => {});
+      loadSuggestions();
     }
-  }, [loadFeed, isGuest, user]);
+  }, [loadFeed, loadSuggestions, isGuest, user]);
 
   const handleCreated = (post) => {
     if (!post) return loadFeed();
@@ -103,12 +134,27 @@ export default function Feed() {
     setPosts(prev => prev.filter(p => p.postId !== postId));
   };
 
+  const markFollowed = (targetUserId) => {
+    setFollowingMap(prev => ({ ...prev, [targetUserId]: true }));
+    setFollowingCount(count => count + 1);
+    setSuggestions(prev => prev.filter(item => String(item.userId) !== String(targetUserId)));
+    loadFeed();
+  };
+
   const handleFollow = async (userId) => {
     if (!user) return;
     try {
       await followApi.follow(user.userId, userId);
-      setFollowingMap(prev => ({ ...prev, [userId]: true }));
-    } catch {}
+      markFollowed(userId);
+    } catch (err) {
+      const status = err.response?.status;
+      const message = err.response?.data?.message || err.message || '';
+      if (status === 409 || /already following/i.test(message)) {
+        markFollowed(userId);
+      } else {
+        setError(message || 'Could not follow this user.');
+      }
+    }
   };
 
   return (
@@ -178,9 +224,9 @@ export default function Feed() {
                   <path d="m21 15-5-5L5 21" />
                 </svg>
               </div>
-              <p className="font-black text-xl mb-1">No posts yet</p>
-              <p className="text-sm text-neutral-500 mb-5">Follow people or share your first moment.</p>
-              {isGuest ? <Link to="/register" className="btn-primary">Get started</Link> : null}
+              <p className="font-black text-xl mb-1">Your feed is waiting</p>
+              <p className="text-sm text-neutral-500 mb-5">{isGuest ? 'Create an account to build your circle.' : followingCount === 0 ? 'Follow people to see their posts here, or share your first moment.' : 'People you follow have not posted yet.'}</p>
+              {isGuest ? <Link to="/register" className="btn-primary">Get started</Link> : <button type="button" onClick={() => { setShowDiscover(true); loadSuggestions(); }} className="btn-primary">Find people to follow</button>}
             </div>
           ) : (
             posts.map(post => (
@@ -190,6 +236,47 @@ export default function Feed() {
             ))
           )}
         </section>
+
+        {showDiscover && (
+          <div className="fixed inset-0 z-[80] bg-black/55 flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={() => setShowDiscover(false)}>
+            <div className="bg-white w-full sm:max-w-md max-h-[82vh] rounded-t-3xl sm:rounded-2xl overflow-hidden shadow-2xl" onClick={e => e.stopPropagation()}>
+              <div className="px-5 py-4 border-b border-neutral-200 flex items-center justify-between">
+                <div>
+                  <h3 className="text-lg font-black">People you may know</h3>
+                  <p className="text-xs text-neutral-500">Follow people to build your ConnectSphere feed.</p>
+                </div>
+                <button type="button" onClick={() => setShowDiscover(false)} className="w-9 h-9 rounded-full bg-neutral-100 text-xl leading-none">x</button>
+              </div>
+              <div className="p-3 max-h-[65vh] overflow-y-auto">
+                {suggestionsLoading ? (
+                  <p className="text-center text-sm text-neutral-500 py-8">Finding people...</p>
+                ) : suggestions.length === 0 ? (
+                  <div className="text-center py-10 px-5">
+                    <p className="font-black mb-1">No suggestions yet</p>
+                    <p className="text-sm text-neutral-500">Try searching for users from the search bar.</p>
+                  </div>
+                ) : suggestions.map(item => (
+                  <div key={item.userId} className="flex items-center gap-3 p-3 rounded-xl hover:bg-neutral-50">
+                    <Link to={`/profile/${item.userId}`} onClick={() => setShowDiscover(false)}>
+                      <Avatar src={item.profilePicture} name={item.fullName || item.username} className="w-12 h-12 text-sm" />
+                    </Link>
+                    <Link to={`/profile/${item.userId}`} onClick={() => setShowDiscover(false)} className="min-w-0 flex-1">
+                      <p className="text-sm font-black truncate">{item.fullName || item.username}</p>
+                      <p className="text-xs text-neutral-500 truncate">@{item.username}</p>
+                    </Link>
+                    {followingMap[item.userId] ? (
+                      <span className="text-xs font-bold text-neutral-400">Following</span>
+                    ) : (
+                      <button type="button" onClick={() => handleFollow(item.userId)} className="px-4 py-2 rounded-lg bg-blue-500 text-white text-xs font-black hover:bg-blue-600">
+                        Follow
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
 
         {!isGuest && (
           <aside className="hidden lg:block">
