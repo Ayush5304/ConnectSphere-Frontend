@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { notificationApi } from '../../api';
+import { notificationApi, followApi, authApi } from '../../api';
 import { useAuth } from '../../context/AuthContext';
 
 const typeLabel = (type = '') => {
@@ -27,6 +27,7 @@ export default function NotificationsPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [items, setItems] = useState([]);
+  const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -35,9 +36,18 @@ export default function NotificationsPage() {
     setLoading(true);
     setError('');
     try {
-      const { data } = await notificationApi.getForUser(user.userId);
-      const next = Array.isArray(data) ? data : [];
+      const [notifRes, requestRes] = await Promise.all([
+        notificationApi.getForUser(user.userId).catch(() => ({ data: [] })),
+        followApi.getReceivedRequests(user.userId).catch(() => ({ data: [] })),
+      ]);
+      const next = Array.isArray(notifRes.data) ? notifRes.data : [];
+      const pending = Array.isArray(requestRes.data) ? requestRes.data : [];
+      const hydrated = await Promise.all(pending.map(async request => {
+        const requester = await authApi.getUserById(request.followerId).then(r => r.data).catch(() => null);
+        return { ...request, requester };
+      }));
       setItems(next);
+      setRequests(hydrated.filter(Boolean));
       notificationApi.markAllRead(user.userId).catch(() => {});
     } catch (err) {
       setError(err.message || 'Could not load notifications.');
@@ -48,6 +58,17 @@ export default function NotificationsPage() {
 
   useEffect(() => { load(); }, [user?.userId]);
 
+  const approveRequest = async (requestId) => {
+    await followApi.approveRequest(user.userId, requestId);
+    setRequests(prev => prev.filter(item => item.requestId !== requestId));
+  };
+
+  const rejectRequest = async (requestId) => {
+    await followApi.rejectRequest(user.userId, requestId);
+    setRequests(prev => prev.filter(item => item.requestId !== requestId));
+  };
+
+
   return (
     <main className="max-w-2xl mx-auto bg-white min-h-[calc(100vh-64px)] pb-20">
       <div className="sticky top-16 z-20 bg-white border-b border-neutral-200 px-4 h-16 flex items-center gap-4">
@@ -56,12 +77,33 @@ export default function NotificationsPage() {
         <button onClick={load} className="ml-auto text-sm font-black text-blue-500">Refresh</button>
       </div>
 
-      <section className="px-4 py-5 border-b border-neutral-100 flex items-center gap-4">
-        <div className="w-14 h-14 rounded-full border border-neutral-200 flex items-center justify-center text-2xl">+</div>
-        <div>
-          <p className="font-black text-lg">Follow requests</p>
-          <p className="text-neutral-500">Approve or ignore requests</p>
+      <section className="px-4 py-5 border-b border-neutral-100">
+        <div className="flex items-center gap-4">
+          <div className="w-14 h-14 rounded-full border border-neutral-200 flex items-center justify-center text-2xl">+</div>
+          <div>
+            <p className="font-black text-lg">Follow requests</p>
+            <p className="text-neutral-500">Approve or ignore requests from private account followers</p>
+          </div>
+          {requests.length > 0 && <span className="ml-auto rounded-full bg-blue-500 text-white text-xs font-black px-2 py-1">{requests.length}</span>}
         </div>
+        {requests.length > 0 && (
+          <div className="mt-4 space-y-3">
+            {requests.map(request => {
+              const requester = request.requester || {};
+              return (
+                <div key={request.requestId} className="flex items-center gap-3 rounded-2xl bg-neutral-50 p-3">
+                  <div className="avatar w-11 h-11 text-sm">{(requester.fullName || requester.username || 'U').slice(0, 1)}</div>
+                  <div className="min-w-0 flex-1">
+                    <p className="font-black text-sm truncate">{requester.fullName || requester.username || 'ConnectSphere user'}</p>
+                    <p className="text-xs text-neutral-500 truncate">@{requester.username || request.followerId} wants to follow you</p>
+                  </div>
+                  <button onClick={() => approveRequest(request.requestId)} className="px-3 py-2 rounded-lg bg-blue-500 text-white text-xs font-black">Confirm</button>
+                  <button onClick={() => rejectRequest(request.requestId)} className="px-3 py-2 rounded-lg bg-neutral-200 text-xs font-black">Delete</button>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </section>
 
       <h2 className="px-4 pt-5 pb-2 text-xl font-black">Highlights</h2>

@@ -12,11 +12,8 @@ const TYPING_EVENT = 'connectsphere:typing-updated';
 const PRESENCE_EVENT = 'connectsphere:presence-updated';
 
 const readJson = (key, fallback) => {
-  try {
-    return JSON.parse(localStorage.getItem(key) || JSON.stringify(fallback));
-  } catch {
-    return fallback;
-  }
+  try { return JSON.parse(localStorage.getItem(key) || JSON.stringify(fallback)); }
+  catch { return fallback; }
 };
 
 const readThreads = () => readJson(THREADS_KEY, {});
@@ -35,31 +32,30 @@ const savePresence = (presence) => writeJson(PRESENCE_KEY, presence, PRESENCE_EV
 const threadIdFor = (a, b) => [String(a), String(b)].sort().join(':');
 const nowIso = () => new Date().toISOString();
 
-const relativeTime = (value) => {
-  if (!value) return 'now';
-  const diff = Math.max(0, Date.now() - new Date(value).getTime());
-  const seconds = Math.floor(diff / 1000);
-  if (seconds < 45) return 'now';
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return minutes + ' min ago';
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return hours + 'h ago';
-  const days = Math.floor(hours / 24);
-  return days + 'd ago';
-};
-
-const clockTime = (value) => {
-  if (!value) return '';
-  return new Date(value).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-};
-
 const normalizeMessage = (message) => ({
   status: 'sent',
   deliveredAt: null,
   seenAt: null,
   seenBy: message.senderId ? [Number(message.senderId)] : [],
+  deletedFor: [],
+  unsent: false,
   ...message,
 });
+
+const relativeTime = (value) => {
+  if (!value) return 'now';
+  const diff = Math.max(0, Date.now() - new Date(value).getTime());
+  const minutes = Math.floor(diff / 60000);
+  if (minutes < 1) return 'now';
+  if (minutes < 60) return minutes + ' min ago';
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return hours + 'h ago';
+  return Math.floor(hours / 24) + 'd ago';
+};
+
+const clockTime = (value) => value ? new Date(value).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+const dateLine = (value) => value ? new Date(value).toLocaleDateString([], { month: 'short', day: 'numeric' }) : '';
+const initials = (name) => String(name || 'U').trim().slice(0, 2).toUpperCase();
 
 export default function Messages() {
   const { user } = useAuth();
@@ -71,13 +67,15 @@ export default function Messages() {
   const [presence, setPresence] = useState(() => readPresence());
   const [query, setQuery] = useState('');
   const [text, setText] = useState('');
+  const [actionMessage, setActionMessage] = useState(null);
   const bottomRef = useRef(null);
 
   const currentUserId = user?.userId;
   const activeThreadId = currentUserId && peerId ? threadIdFor(currentUserId, peerId) : '';
+  const rawMessages = activeThreadId ? (threads[activeThreadId] || []).map(normalizeMessage) : [];
   const messages = useMemo(
-    () => (activeThreadId ? (threads[activeThreadId] || []).map(normalizeMessage) : []),
-    [activeThreadId, threads]
+    () => rawMessages.filter(msg => !(msg.deletedFor || []).map(String).includes(String(currentUserId))),
+    [rawMessages, currentUserId]
   );
 
   useEffect(() => {
@@ -87,23 +85,15 @@ export default function Messages() {
         if (cancelled) return;
         setUsers((Array.isArray(data) ? data : []).filter(item =>
           String(item.userId) !== String(currentUserId) &&
-          item.role !== 'ADMIN' &&
-          item.role !== 'GUEST' &&
-          item.active !== false
+          item.role !== 'ADMIN' && item.role !== 'GUEST' && item.active !== false
         ));
       })
-      .catch(() => {
-        if (!cancelled) setUsers([]);
-      });
+      .catch(() => !cancelled && setUsers([]));
     return () => { cancelled = true; };
   }, [currentUserId]);
 
   useEffect(() => {
-    const sync = () => {
-      setThreads(readThreads());
-      setTyping(readTyping());
-      setPresence(readPresence());
-    };
+    const sync = () => { setThreads(readThreads()); setTyping(readTyping()); setPresence(readPresence()); };
     window.addEventListener('storage', sync);
     window.addEventListener(MESSAGE_EVENT, sync);
     window.addEventListener(TYPING_EVENT, sync);
@@ -139,14 +129,9 @@ export default function Messages() {
       const msg = normalizeMessage(raw);
       const mine = String(msg.senderId) === String(currentUserId);
       const alreadySeen = (msg.seenBy || []).map(String).includes(String(currentUserId));
-      if (mine || alreadySeen) return msg;
+      if (mine || alreadySeen || msg.unsent) return msg;
       changed = true;
-      return {
-        ...msg,
-        status: 'seen',
-        seenAt: nowIso(),
-        seenBy: [...new Set([...(msg.seenBy || []), Number(currentUserId)])],
-      };
+      return { ...msg, status: 'seen', seenAt: nowIso(), seenBy: [...new Set([...(msg.seenBy || []), Number(currentUserId)])] };
     });
     if (changed) {
       const updated = { ...current, [activeThreadId]: nextMessages };
@@ -155,51 +140,39 @@ export default function Messages() {
     }
   }, [activeThreadId, currentUserId]);
 
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [peerId, messages.length]);
+  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [peerId, messages.length]);
 
   const peer = users.find(item => String(item.userId) === String(peerId));
-
-  const getThread = (userId) => threads[threadIdFor(currentUserId, userId)] || [];
-
-  const getUnreadCount = (userId) => getThread(userId).filter(raw => {
-    const msg = normalizeMessage(raw);
-    return String(msg.senderId) !== String(currentUserId) &&
-      !(msg.seenBy || []).map(String).includes(String(currentUserId));
-  }).length;
-
   const isOnline = (userId) => Date.now() - Number(presence[userId] || 0) < 45000;
+  const getThread = (userId) => (threads[threadIdFor(currentUserId, userId)] || []).map(normalizeMessage);
+  const getVisibleThread = (userId) => getThread(userId).filter(msg => !(msg.deletedFor || []).map(String).includes(String(currentUserId)));
+  const getUnreadCount = (userId) => getVisibleThread(userId).filter(msg => String(msg.senderId) !== String(currentUserId) && !(msg.seenBy || []).map(String).includes(String(currentUserId))).length;
 
   const inbox = useMemo(() => {
     const q = query.trim().toLowerCase();
     return users
       .filter(item => !q || (String(item.fullName || '') + ' ' + String(item.username || '')).toLowerCase().includes(q))
       .sort((a, b) => {
-        const aLast = (threads[threadIdFor(currentUserId, a.userId)] || []).at(-1);
-        const bLast = (threads[threadIdFor(currentUserId, b.userId)] || []).at(-1);
+        const aLast = getVisibleThread(a.userId).at(-1);
+        const bLast = getVisibleThread(b.userId).at(-1);
         return new Date(bLast?.createdAt || 0) - new Date(aLast?.createdAt || 0);
       });
   }, [users, threads, query, currentUserId]);
 
-  const latestOutgoingId = useMemo(() => {
-    return [...messages].reverse().find(msg => String(msg.senderId) === String(currentUserId))?.id;
-  }, [messages, currentUserId]);
+  const latestOutgoingId = useMemo(() => [...messages].reverse().find(msg => String(msg.senderId) === String(currentUserId))?.id, [messages, currentUserId]);
 
   const latestStatusText = (message) => {
+    if (message.unsent) return '';
     const seenByPeer = (message.seenBy || []).map(String).includes(String(peerId));
     if (seenByPeer || message.status === 'seen') return 'Seen';
-    if (message.status === 'delivered') return 'Delivered ? ' + relativeTime(message.deliveredAt || message.createdAt);
-    return 'Sent ? ' + relativeTime(message.createdAt);
+    if (message.status === 'delivered') return 'Delivered - ' + relativeTime(message.deliveredAt || message.createdAt);
+    return 'Sent - ' + relativeTime(message.createdAt);
   };
 
   const updateTyping = (value) => {
     setText(value);
     if (!activeThreadId || !currentUserId) return;
-    const next = {
-      ...readTyping(),
-      [activeThreadId]: value.trim() ? { userId: currentUserId, until: Date.now() + 1800 } : null,
-    };
+    const next = { ...readTyping(), [activeThreadId]: value.trim() ? { userId: currentUserId, until: Date.now() + 1800 } : null };
     saveTyping(next);
     setTyping(next);
   };
@@ -217,22 +190,20 @@ export default function Messages() {
       seenAt: null,
       status: 'sent',
       seenBy: [Number(currentUserId)],
+      deletedFor: [],
+      unsent: false,
     };
     const current = readThreads();
-    const updated = {
-      ...current,
-      [activeThreadId]: [...(current[activeThreadId] || []), nextMessage],
-    };
+    const updated = { ...current, [activeThreadId]: [...(current[activeThreadId] || []), nextMessage] };
     setThreads(updated);
     saveThreads(updated);
     updateTyping('');
 
     window.setTimeout(() => {
       const latestThreads = readThreads();
-      const latestMessages = latestThreads[activeThreadId] || [];
-      const deliveredMessages = latestMessages.map(raw => {
+      const deliveredMessages = (latestThreads[activeThreadId] || []).map(raw => {
         const msg = normalizeMessage(raw);
-        if (msg.id !== nextMessage.id || msg.status !== 'sent') return msg;
+        if (msg.id !== nextMessage.id || msg.status !== 'sent' || msg.unsent) return msg;
         return { ...msg, status: 'delivered', deliveredAt: nowIso() };
       });
       const deliveredThreads = { ...latestThreads, [activeThreadId]: deliveredMessages };
@@ -241,142 +212,142 @@ export default function Messages() {
     }, 350);
   };
 
-  const peerTyping = activeThreadId && typing[activeThreadId] &&
-    String(typing[activeThreadId]?.userId) === String(peerId) &&
-    Number(typing[activeThreadId]?.until || 0) > Date.now();
+  const updateMessage = (messageId, updater) => {
+    if (!activeThreadId) return;
+    const current = readThreads();
+    const nextMessages = (current[activeThreadId] || []).map(raw => {
+      const msg = normalizeMessage(raw);
+      return msg.id === messageId ? updater(msg) : msg;
+    });
+    const updated = { ...current, [activeThreadId]: nextMessages };
+    setThreads(updated);
+    saveThreads(updated);
+    setActionMessage(null);
+  };
+
+  const deleteForMe = (messageId) => updateMessage(messageId, msg => ({ ...msg, deletedFor: [...new Set([...(msg.deletedFor || []), Number(currentUserId)])] }));
+  const unsendMessage = (messageId) => updateMessage(messageId, msg => ({ ...msg, text: 'This message was unsent', unsent: true, status: 'seen', unsentAt: nowIso(), deletedFor: [] }));
+
+  const peerTyping = activeThreadId && typing[activeThreadId] && String(typing[activeThreadId]?.userId) === String(peerId) && Number(typing[activeThreadId]?.until || 0) > Date.now();
 
   return (
-    <main className="max-w-5xl mx-auto px-0 sm:px-4 py-0 sm:py-6 pb-20">
-      <div className="bg-white sm:border border-neutral-200 sm:rounded-2xl overflow-hidden min-h-[calc(100vh-96px)] grid grid-cols-1 md:grid-cols-[360px_1fr] shadow-sm">
-        <aside className={(peerId ? 'hidden md:block ' : 'block ') + 'border-r border-neutral-200'}>
-          <div className="p-4 border-b border-neutral-200 sticky top-0 bg-white z-10">
+    <main className="min-h-[calc(100vh-64px)] bg-[radial-gradient(circle_at_top_left,rgba(214,41,118,0.14),transparent_30%),radial-gradient(circle_at_bottom_right,rgba(0,149,246,0.12),transparent_28%),linear-gradient(180deg,#fafafa,#f4f4f5)] px-0 sm:px-5 py-0 sm:py-6 pb-20">
+      <div className="max-w-6xl mx-auto bg-white/90 backdrop-blur sm:border border-neutral-200 sm:rounded-[28px] overflow-hidden min-h-[calc(100vh-96px)] grid grid-cols-1 md:grid-cols-[390px_1fr] shadow-[0_24px_80px_rgba(0,0,0,0.10)]">
+        <aside className={(peerId ? 'hidden md:block ' : 'block ') + 'border-r border-neutral-200 bg-white/80'}>
+          <div className="p-5 border-b border-neutral-200 sticky top-0 bg-white/95 backdrop-blur z-10">
             <div className="flex items-center justify-between">
-              <h1 className="text-2xl font-black truncate">{user?.username || 'Messages'}</h1>
-              <span className="text-xs font-bold text-neutral-500">DMs</span>
+              <div>
+                <h1 className="text-2xl font-black tracking-tight truncate">{user?.username || 'Messages'}</h1>
+                <p className="text-xs text-neutral-500 font-bold mt-0.5">Direct messages</p>
+              </div>
+              <div className="w-10 h-10 rounded-full g-primary text-white flex items-center justify-center font-black shadow-lg">+</div>
             </div>
-            <div className="mt-4 rounded-xl bg-neutral-100 px-3 h-11 flex items-center">
+            <div className="mt-4 rounded-2xl bg-neutral-100 px-4 h-12 flex items-center focus-within:ring-2 focus-within:ring-blue-100">
               <span className="text-neutral-400 mr-2">Search</span>
-              <input
-                value={query}
-                onChange={e => setQuery(e.target.value)}
-                className="bg-transparent outline-none flex-1 text-sm"
-                placeholder="Search messages"
-              />
+              <input value={query} onChange={e => setQuery(e.target.value)} className="bg-transparent outline-none flex-1 text-sm" placeholder="Search messages" />
             </div>
           </div>
 
-          <div className="max-h-[calc(100vh-190px)] overflow-y-auto">
-            {inbox.length === 0 && (
-              <div className="p-8 text-center text-sm text-neutral-500">
-                <p className="font-black text-neutral-900">No chats yet</p>
-                <p>Search for people and start a conversation.</p>
-              </div>
-            )}
+          <div className="max-h-[calc(100vh-206px)] overflow-y-auto p-2">
+            {inbox.length === 0 && <div className="p-8 text-center text-sm text-neutral-500"><p className="font-black text-neutral-900">No chats yet</p><p>Search for people and start a conversation.</p></div>}
             {inbox.map(item => {
-              const itemThread = getThread(item.userId).map(normalizeMessage);
+              const itemThread = getVisibleThread(item.userId);
               const last = itemThread.at(-1);
               const unread = getUnreadCount(item.userId);
               const active = String(peerId) === String(item.userId);
+              const preview = last?.unsent ? 'This message was unsent' : (last ? (String(last.senderId) === String(currentUserId) ? 'You: ' : '') + last.text : '@' + item.username);
               return (
-                <button
-                  key={item.userId}
-                  onClick={() => setParams({ user: item.userId })}
-                  className={'w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-neutral-50 ' + (active ? 'bg-neutral-50' : '')}
-                >
-                  <div className="relative shrink-0">
-                    <Avatar src={item.profilePicture || item.profileImage || item.avatarUrl} name={item.fullName || item.username} className="w-14 h-14 text-sm" />
-                    {isOnline(item.userId) && <span className="absolute bottom-0 right-0 w-3.5 h-3.5 rounded-full bg-green-500 border-2 border-white" />}
+                <button key={item.userId} onClick={() => setParams({ user: item.userId })} className={(active ? 'bg-neutral-100 ' : 'hover:bg-neutral-50 ') + 'w-full flex items-center gap-3 p-4 rounded-3xl text-left transition group'}>
+                  <div className="relative">
+                    <Avatar user={item} size="lg" />
+                    {isOnline(item.userId) && <span className="absolute bottom-0 right-0 w-3.5 h-3.5 rounded-full bg-emerald-500 border-2 border-white" />}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <p className={(unread ? 'font-black ' : 'font-bold ') + 'text-sm truncate'}>{item.fullName || item.username}</p>
-                      {last && <span className="ml-auto text-[11px] text-neutral-400 shrink-0">{relativeTime(last.createdAt)}</span>}
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="font-black truncate text-neutral-950">{item.fullName || item.username}</p>
+                      <span className="text-xs text-neutral-400 shrink-0">{last ? relativeTime(last.createdAt) : ''}</span>
                     </div>
-                    <div className="flex items-center gap-2 mt-0.5">
-                      <p className={(unread ? 'text-neutral-900 font-bold ' : 'text-neutral-500 ') + 'text-xs truncate'}>
-                        {last ? (String(last.senderId) === String(currentUserId) ? 'You: ' : '') + last.text : '@' + item.username}
-                      </p>
-                      {unread > 0 && <span className="ml-auto min-w-5 h-5 px-1 rounded-full bg-blue-500 text-white text-[11px] font-black flex items-center justify-center">{unread}</span>}
-                    </div>
+                    <p className={(unread ? 'font-black text-neutral-950 ' : 'text-neutral-500 ') + 'text-sm truncate'}>{preview}</p>
                   </div>
+                  {unread > 0 && <span className="min-w-5 h-5 px-1 rounded-full bg-blue-500 text-white text-[11px] font-black flex items-center justify-center">{unread}</span>}
                 </button>
               );
             })}
           </div>
         </aside>
 
-        <section className={(peerId ? 'flex ' : 'hidden md:flex ') + 'flex-col min-h-[calc(100vh-96px)]'}>
-          {peer ? (
-            <>
-              <div className="h-16 border-b border-neutral-200 px-4 flex items-center gap-3 sticky top-0 bg-white z-10">
-                <button className="md:hidden text-2xl leading-none" onClick={() => setParams({})} aria-label="Back">?</button>
-                <div className="relative">
-                  <Avatar src={peer.profilePicture || peer.profileImage || peer.avatarUrl} name={peer.fullName || peer.username} className="w-10 h-10 text-xs" />
-                  {isOnline(peer.userId) && <span className="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-green-500 border-2 border-white" />}
-                </div>
-                <Link to={'/profile/' + peer.userId} className="min-w-0 flex-1">
-                  <p className="font-black text-sm truncate">{peer.fullName || peer.username}</p>
-                  <p className="text-xs text-neutral-500 truncate">{isOnline(peer.userId) ? 'Active now' : '@' + peer.username}</p>
-                </Link>
+        <section className={(peerId ? 'flex ' : 'hidden md:flex ') + 'flex-col min-h-[calc(100vh-96px)] bg-[linear-gradient(180deg,#fff,#fbfbfc)]'}>
+          {!peer ? (
+            <div className="flex-1 flex items-center justify-center p-8 text-center">
+              <div className="max-w-sm">
+                <div className="w-20 h-20 rounded-[28px] g-primary mx-auto mb-5 flex items-center justify-center text-white font-black text-3xl shadow-xl">DM</div>
+                <h2 className="text-3xl font-black tracking-tight">Your messages</h2>
+                <p className="text-neutral-500 mt-2">Choose a conversation or search for someone to start a polished ConnectSphere chat.</p>
               </div>
+            </div>
+          ) : (
+            <>
+              <header className="h-20 border-b border-neutral-200 px-4 sm:px-6 flex items-center justify-between bg-white/85 backdrop-blur sticky top-0 z-20">
+                <div className="flex items-center gap-3 min-w-0">
+                  <button onClick={() => setParams({})} className="md:hidden w-10 h-10 rounded-full hover:bg-neutral-100">Back</button>
+                  <div className="relative"><Avatar user={peer} size="lg" />{isOnline(peer.userId) && <span className="absolute bottom-0 right-0 w-3.5 h-3.5 rounded-full bg-emerald-500 border-2 border-white" />}</div>
+                  <Link to={'/profile/' + peer.userId} className="min-w-0">
+                    <p className="font-black truncate text-neutral-950">{peer.fullName || peer.username}</p>
+                    <p className="text-sm text-neutral-500 truncate">{isOnline(peer.userId) ? 'Active now' : '@' + peer.username}</p>
+                  </Link>
+                </div>
+                <div className="flex items-center gap-2 text-neutral-700">
+                  <button className="hidden sm:flex px-4 h-10 rounded-full bg-neutral-100 hover:bg-neutral-200 font-black text-sm transition">Audio</button>
+                  <button className="hidden sm:flex px-4 h-10 rounded-full bg-neutral-100 hover:bg-neutral-200 font-black text-sm transition">Video</button>
+                </div>
+              </header>
 
-              <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-neutral-50">
-                {messages.length === 0 && (
-                  <div className="h-full flex flex-col items-center justify-center text-center">
-                    <Avatar src={peer.profilePicture || peer.profileImage || peer.avatarUrl} name={peer.fullName || peer.username} className="w-24 h-24 text-2xl mb-4" />
-                    <p className="font-black text-xl">{peer.fullName || peer.username}</p>
-                    <p className="text-sm text-neutral-500">@{peer.username}</p>
-                    <p className="text-sm text-neutral-500 mt-2">Send a message to start the conversation.</p>
-                  </div>
-                )}
+              <div className="flex-1 overflow-y-auto px-4 sm:px-8 py-6 space-y-3">
+                <div className="text-center mb-8">
+                  <Avatar user={peer} size="xl" />
+                  <p className="mt-3 font-black text-xl">{peer.fullName || peer.username}</p>
+                  <p className="text-neutral-500 text-sm">@{peer.username}</p>
+                </div>
 
+                {messages.length === 0 && <div className="text-center text-neutral-500 text-sm py-10">Send a message to start the conversation.</div>}
                 {messages.map((msg, index) => {
                   const mine = String(msg.senderId) === String(currentUserId);
                   const previous = messages[index - 1];
-                  const showTime = !previous || (new Date(msg.createdAt) - new Date(previous.createdAt)) > 10 * 60 * 1000;
-                  const showLatestOutgoingStatus = mine && msg.id === latestOutgoingId;
+                  const showDate = !previous || dateLine(previous.createdAt) !== dateLine(msg.createdAt);
                   return (
-                    <div key={msg.id}>
-                      {showTime && <p className="text-center text-[11px] text-neutral-400 my-3">{clockTime(msg.createdAt)}</p>}
-                      <div className={'flex ' + (mine ? 'justify-end' : 'justify-start')}>
-                        <div className={(mine ? 'bg-blue-500 text-white rounded-br-md ' : 'bg-white border border-neutral-200 rounded-bl-md ') + 'max-w-[75%] rounded-2xl px-4 py-2 text-sm shadow-sm'}>
-                          {msg.text}
+                    <React.Fragment key={msg.id}>
+                      {showDate && <div className="text-center text-xs text-neutral-400 font-bold py-4">{dateLine(msg.createdAt)}</div>}
+                      <div className={(mine ? 'justify-end ' : 'justify-start ') + 'flex group relative'}>
+                        {!mine && <div className="mr-2 self-end"><Avatar user={peer} size="sm" /></div>}
+                        <div className={(mine ? 'items-end ' : 'items-start ') + 'max-w-[78%] flex flex-col'}>
+                          <div className={(mine ? 'bg-gradient-to-br from-blue-500 via-purple-500 to-pink-500 text-white rounded-br-md ' : 'bg-white border border-neutral-200 text-neutral-950 rounded-bl-md ') + (msg.unsent ? 'italic text-neutral-400 bg-neutral-100 border-neutral-200 ' : '') + 'rounded-[24px] px-4 py-3 shadow-sm break-words'}>
+                            {msg.text}
+                          </div>
+                          {msg.id === latestOutgoingId && mine && !msg.unsent && <span className="text-[11px] text-neutral-400 mt-1 mr-1 font-semibold">{latestStatusText(msg)}</span>}
                         </div>
+                        <button onClick={() => setActionMessage(actionMessage === msg.id ? null : msg.id)} className="opacity-0 group-hover:opacity-100 transition ml-2 self-center w-8 h-8 rounded-full hover:bg-neutral-100 text-neutral-500">...</button>
+                        {actionMessage === msg.id && (
+                          <div className={(mine ? 'right-10 ' : 'left-12 ') + 'absolute top-full mt-2 z-30 w-44 rounded-2xl bg-white border border-neutral-200 shadow-xl p-2'}>
+                            {mine && !msg.unsent && <button onClick={() => unsendMessage(msg.id)} className="w-full text-left px-3 py-2 rounded-xl hover:bg-red-50 text-red-600 font-bold text-sm">Unsend</button>}
+                            <button onClick={() => deleteForMe(msg.id)} className="w-full text-left px-3 py-2 rounded-xl hover:bg-neutral-100 font-bold text-sm">Delete for me</button>
+                          </div>
+                        )}
                       </div>
-                      {showLatestOutgoingStatus && (
-                        <p className="text-[11px] text-neutral-500 text-right mt-1 pr-1">{latestStatusText(msg)}</p>
-                      )}
-                    </div>
+                    </React.Fragment>
                   );
                 })}
-
-                {peerTyping && (
-                  <div className="flex justify-start">
-                    <div className="rounded-2xl rounded-bl-md px-4 py-2 bg-white border border-neutral-200 text-xs text-neutral-500 shadow-sm">typing...</div>
-                  </div>
-                )}
+                {peerTyping && <div className="text-sm text-neutral-500 pl-12">typing...</div>}
                 <div ref={bottomRef} />
               </div>
 
-              <div className="p-3 border-t border-neutral-200 bg-white">
-                <div className="rounded-full border border-neutral-300 px-4 py-2 flex items-center gap-2 focus-within:border-neutral-500">
-                  <input
-                    value={text}
-                    onChange={e => updateTyping(e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && send()}
-                    className="flex-1 outline-none text-sm bg-transparent"
-                    placeholder="Message..."
-                  />
-                  <button onClick={send} className="text-blue-500 font-black text-sm disabled:text-neutral-300" disabled={!text.trim()}>Send</button>
+              <footer className="p-4 sm:p-5 border-t border-neutral-200 bg-white/90 backdrop-blur">
+                <div className="flex items-center gap-3 rounded-full border border-neutral-200 bg-white shadow-sm px-4 py-2 focus-within:ring-2 focus-within:ring-blue-100">
+                  <button type="button" className="w-10 h-10 rounded-full g-primary text-white font-black shrink-0">+</button>
+                  <input value={text} onChange={e => updateTyping(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') send(); }} placeholder="Message..." className="flex-1 outline-none bg-transparent text-sm" />
+                  <button onClick={send} disabled={!text.trim()} className="px-5 h-10 rounded-full bg-blue-500 text-white font-black disabled:opacity-40 disabled:cursor-not-allowed hover:bg-blue-600 transition">Send</button>
                 </div>
-              </div>
+              </footer>
             </>
-          ) : (
-            <div className="flex-1 flex flex-col items-center justify-center text-center p-6">
-              <div className="w-20 h-20 rounded-full border-2 border-neutral-900 flex items-center justify-center text-3xl mb-4">?</div>
-              <p className="text-xl font-black">Your messages</p>
-              <p className="text-sm text-neutral-500">Send private messages to people on ConnectSphere.</p>
-            </div>
           )}
         </section>
       </div>

@@ -16,7 +16,9 @@
   },
   "scripts": {
     "start": "react-scripts start",
-    "build": "react-scripts build"
+    "build": "react-scripts build",
+    "serve": "node serve-frontend.js",
+    "build-and-serve": "npm run build && node serve-frontend.js"
   },
   "proxy": "http://localhost:8080",
   "browserslist": {

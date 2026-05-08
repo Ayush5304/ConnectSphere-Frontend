@@ -64,6 +64,8 @@ export default function Profile() {
   const [stories, setStories] = useState([]);
   const [counts, setCounts] = useState({ followers: 0, following: 0 });
   const [isFollowing, setIsFollowing] = useState(false);
+  const [followRequested, setFollowRequested] = useState(false);
+  const [privacyChecked, setPrivacyChecked] = useState(false);
   const [followLoading, setFollowLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -83,6 +85,8 @@ export default function Profile() {
   const isOwnProfile = user && String(user.userId) === String(userId);
   const displayName = profileUser?.fullName || profileUser?.username || `User #${userId}`;
   const isVerified = profileUser?.verified === true || profileUser?.verified === 'true';
+  const isPrivateProfile = profileUser?.privateAccount === true || profileUser?.privateAccount === 'true';
+  const canViewPrivateContent = isOwnProfile || !isPrivateProfile || isFollowing;
   const visiblePosts = useMemo(() => posts.filter(p => !p.deleted), [posts]);
   const reelPosts = useMemo(() => visiblePosts.filter(isVideoPost), [visiblePosts]);
 
@@ -100,8 +104,29 @@ export default function Profile() {
         return;
       }
 
-      setProfileUser({ ...userRes.data, ...(getProfileOverride(userId) || {}) });
+      const mergedUser = { ...userRes.data, ...(getProfileOverride(userId) || {}) };
+      setProfileUser(mergedUser);
       setCounts(normalizeCounts(countsRes.data));
+
+      let viewerFollowsProfile = false;
+      if (user && String(user.userId) !== String(userId) && user.role !== 'GUEST') {
+        const { data } = await followApi.getRelationshipStatus(user.userId, userId).catch(() => ({ data: { following: false, requested: false } }));
+        viewerFollowsProfile = Boolean(data?.following);
+        setIsFollowing(viewerFollowsProfile);
+        setFollowRequested(Boolean(data?.requested || data?.status === 'REQUESTED'));
+      } else {
+        setIsFollowing(false);
+        setFollowRequested(false);
+      }
+      setPrivacyChecked(true);
+
+      const privateProfile = mergedUser.privateAccount === true || mergedUser.privateAccount === 'true';
+      const canView = String(user?.userId) === String(userId) || !privateProfile || viewerFollowsProfile;
+      if (!canView) {
+        setPosts([]);
+        setStories([]);
+        return;
+      }
 
       const [postsRes, storiesRes] = await Promise.all([
         postApi.getByUser(userId).catch(async () => {
@@ -119,38 +144,57 @@ export default function Profile() {
       setLoading(false);
     }
 
-    if (user && !isOwnProfile && user.role !== 'GUEST') {
-      followApi.isFollowing(user.userId, userId)
-        .then(({ data }) => setIsFollowing(Boolean(data?.following)))
-        .catch(() => setIsFollowing(false));
-    }
+
   };
 
   useEffect(() => {
     loadProfile();
   }, [userId, user?.userId]);
 
+  const refreshFollowCounts = async () => {
+    const { data } = await followApi.getCounts(userId).catch(() => ({ data: counts }));
+    const nextCounts = normalizeCounts(data);
+    setCounts(nextCounts);
+    return nextCounts;
+  };
+
+  const refreshFollowState = async () => {
+    if (!user || String(user.userId) === String(userId) || user.role === 'GUEST') return false;
+    const { data } = await followApi.getRelationshipStatus(user.userId, userId).catch(() => ({ data: { following: false, requested: false } }));
+    const next = Boolean(data?.following);
+    setIsFollowing(next);
+    setFollowRequested(Boolean(data?.requested || data?.status === 'REQUESTED'));
+    return next;
+  };
+
   const toggleFollow = async () => {
     if (!user || user.role === 'GUEST') return navigate('/login');
     setFollowLoading(true);
     try {
-      if (isFollowing) {
+      if (isFollowing || followRequested) {
         await followApi.unfollow(user.userId, userId);
         setIsFollowing(false);
-        setCounts(c => ({ ...c, followers: Math.max(0, c.followers - 1) }));
+        setFollowRequested(false);
       } else {
-        await followApi.follow(user.userId, userId);
+        const { data } = await followApi.follow(user.userId, userId);
+        const requested = Boolean(data?.requested || data?.status === 'REQUESTED');
+        setIsFollowing(Boolean(data?.following || data?.status === 'FOLLOWING'));
+        setFollowRequested(requested);
+      }
+    } catch (err) {
+      const status = err.response?.status;
+      const message = err.response?.data?.message || err.message || '';
+      if (status === 409 || /already following/i.test(message)) {
         setIsFollowing(true);
-        setCounts(c => ({ ...c, followers: c.followers + 1 }));
+        setFollowRequested(false);
+      } else {
+        await refreshFollowState();
       }
     } finally {
+      await refreshFollowCounts();
       setFollowLoading(false);
+      if (!isFollowing && isPrivateProfile && !followRequested) loadProfile();
     }
-  };
-
-  const refreshFollowCounts = async () => {
-    const { data } = await followApi.getCounts(userId).catch(() => ({ data: counts }));
-    setCounts(normalizeCounts(data));
   };
 
   const openModal = async (type) => {
@@ -174,13 +218,13 @@ export default function Profile() {
   const removeFollower = async (followerId) => {
     await followApi.unfollow(followerId, userId).catch(() => {});
     setModalUsers(prev => prev.filter(item => String(item.userId) !== String(followerId)));
-    setCounts(c => ({ ...c, followers: Math.max(0, c.followers - 1) }));
+    await refreshFollowCounts();
   };
 
   const unfollowFromModal = async (targetId) => {
     await followApi.unfollow(user.userId, targetId).catch(() => {});
     setModalUsers(prev => prev.filter(item => String(item.userId) !== String(targetId)));
-    setCounts(c => ({ ...c, following: Math.max(0, c.following - 1) }));
+    await refreshFollowCounts();
   };
 
   const handleDeletePost = async (postId) => {
@@ -235,8 +279,8 @@ export default function Profile() {
                 {isOwnProfile ? (
                   <Link to="/edit-profile" className="btn-outline h-9 px-4">Edit profile</Link>
                 ) : (
-                  <button type="button" onClick={toggleFollow} disabled={followLoading} className={isFollowing ? 'btn-outline h-9 px-5' : 'btn-primary h-9 px-5'}>
-                    {followLoading ? '...' : isFollowing ? 'Following' : 'Follow'}
+                  <button type="button" onClick={toggleFollow} disabled={followLoading} className={(isFollowing || followRequested) ? 'btn-outline h-9 px-5' : 'btn-primary h-9 px-5'}>
+                    {followLoading ? '...' : isFollowing ? 'Following' : followRequested ? 'Requested' : 'Follow'}
                   </button>
                 )}
                 {!isOwnProfile && user?.role !== 'GUEST' && (
@@ -280,6 +324,16 @@ export default function Profile() {
         </div>
       </section>
 
+      {isPrivateProfile && !canViewPrivateContent && privacyChecked && (
+        <section className="card p-10 sm:p-14 text-center mb-6">
+          <div className="w-16 h-16 rounded-full border-2 border-neutral-900 flex items-center justify-center mx-auto mb-4 text-2xl font-black">Lock</div>
+          <p className="font-black text-xl mb-1">This Account is Private</p>
+          <p className="text-sm text-neutral-500 max-w-md mx-auto mb-5">Follow @{profileUser?.username || 'this user'} to see their photos, stories, reels, followers activity, and profile content.</p>
+          {!user || user.role === 'GUEST' ? <Link to="/login" className="btn-primary">Log in to follow</Link> : <button type="button" onClick={toggleFollow} disabled={followLoading} className="btn-primary">{followLoading ? '...' : followRequested ? 'Requested' : 'Follow'}</button>}
+        </section>
+      )}
+
+      {canViewPrivateContent && <>
       <div className="border-t border-neutral-200 grid grid-cols-3 mb-1">
         {tabs.map(tab => (
           <button key={tab.key} type="button" onClick={() => setActiveTab(tab.key)} className={`h-12 text-xs font-black uppercase tracking-wide flex items-center justify-center gap-2 border-t-2 -mt-px ${activeTab === tab.key ? 'border-neutral-950 text-neutral-950' : 'border-transparent text-neutral-400'}`}>
@@ -371,6 +425,8 @@ export default function Profile() {
           </div>
         </div>
       )}
+
+      </>}
 
       {showReport && (
         <div className="fixed inset-0 bg-black/55 z-[80] flex items-center justify-center p-4" onClick={() => setShowReport(false)}>

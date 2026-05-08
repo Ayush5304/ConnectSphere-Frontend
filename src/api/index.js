@@ -204,6 +204,8 @@ export const authApi = {
     ? axios.put(`${API}/auth/user/${userId}/profile`, data, localServiceHeader())
     : axios.put(`${API}/auth/profile`, data, authHeader()),
 
+  updatePrivacy:  (userId, privateAccount) => axios.put(`${API}/auth/user/${userId}/profile`, { privateAccount: String(privateAccount) }, localServiceHeader()),
+
   /* Forgot password - sends email, backend sends reset link */
   forgotPassword: (email)             => axios.post(`${API}/auth/forgot-password`, { email }),
 
@@ -366,6 +368,13 @@ export const followApi = {
 
   /* Check if one user follows another - returns {following: true/false} */
   isFollowing:  (followerId, followingId) => axios.get(`${API}/follows/${followerId}/is-following/${followingId}`),
+
+  /* Private account follow-request workflow */
+  getRelationshipStatus: (followerId, followingId) => axios.get(`${API}/follows/${followerId}/status/${followingId}`),
+  getReceivedRequests:   (userId) => axios.get(`${API}/follows/${userId}/requests/received`, localServiceHeader()),
+  getSentRequests:       (userId) => axios.get(`${API}/follows/${userId}/requests/sent`, localServiceHeader()),
+  approveRequest:        (ownerId, requestId) => axios.put(`${API}/follows/${ownerId}/requests/${requestId}/approve`, {}, localServiceHeader()),
+  rejectRequest:         (ownerId, requestId) => axios.put(`${API}/follows/${ownerId}/requests/${requestId}/reject`, {}, localServiceHeader()),
 
   /* Get list of mutual followers between two users */
   getMutual:    (userId, otherUserId)     => axios.get(`${API}/follows/${userId}/mutual-list/${otherUserId}`),

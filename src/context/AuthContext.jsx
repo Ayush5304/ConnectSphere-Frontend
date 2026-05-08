@@ -46,6 +46,7 @@ export function AuthProvider({ children }) {
       ...data,
       userId: data.userId != null ? Number(data.userId) : data.userId,
       verified: data.verified === true || data.verified === 'true',
+      privateAccount: data.privateAccount === true || data.privateAccount === 'true',
       profilePicture: resolveMediaUrl(data.profilePicture || ''),
       coverPicture: resolveMediaUrl(data.coverPicture || '')
     };
@@ -99,6 +100,14 @@ export function AuthProvider({ children }) {
    *   2. Removes user from localStorage (page refresh won't restore session)
    *   3. Sets user to null -> all components re-render showing logged-out state
    */
+  const updateUser = (patch) => {
+    setUser(prev => {
+      const next = normalizeUserMedia({ ...(prev || {}), ...(patch || {}) });
+      localStorage.setItem('user', JSON.stringify(next));
+      return next;
+    });
+  };
+
   const logout = () => {
     clearStoredAuth();
     setUser(null);
@@ -116,7 +125,7 @@ export function AuthProvider({ children }) {
    * {children} - renders everything wrapped inside <AuthProvider>
    */
   return (
-    <AuthContext.Provider value={{ user, login, logout }}>
+    <AuthContext.Provider value={{ user, login, logout, updateUser }}>
       {children}
     </AuthContext.Provider>
   );

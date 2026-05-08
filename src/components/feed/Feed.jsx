@@ -33,6 +33,7 @@ export default function Feed() {
   const [error, setError] = useState('');
   const [suggestions, setSuggestions] = useState([]);
   const [followingMap, setFollowingMap] = useState({});
+  const [requestedMap, setRequestedMap] = useState({});
   const [followingCount, setFollowingCount] = useState(0);
   const [showDiscover, setShowDiscover] = useState(false);
   const [suggestionsLoading, setSuggestionsLoading] = useState(false);
@@ -54,7 +55,7 @@ export default function Feed() {
     try {
       if (isGuest) {
         const { data } = await postApi.getFeed().catch(() => ({ data: [] }));
-        setPosts(normalizeFeedPosts(Array.isArray(data) ? data : []));
+        setPosts(normalizeFeedPosts(Array.isArray(data) ? data : []).slice(0, 3));
       } else {
         const { data: followingIds } = await followApi.getFollowing(user.userId).catch(() => ({ data: [] }));
         const followed = Array.isArray(followingIds) ? followingIds.map(Number).filter(Boolean) : [];
@@ -100,7 +101,8 @@ export default function Feed() {
 
       const statusPairs = await Promise.all(base.map(async item => {
         if (followed.has(String(item.userId))) return [item.userId, true];
-        const { data } = await followApi.isFollowing(user.userId, item.userId).catch(() => ({ data: { following: false } }));
+        const { data } = await followApi.getRelationshipStatus(user.userId, item.userId).catch(() => ({ data: { following: false, requested: false } }));
+        if (data?.requested || data?.status === 'REQUESTED') setRequestedMap(prev => ({ ...prev, [item.userId]: true }));
         return [item.userId, Boolean(data?.following)];
       }));
       const statusMap = Object.fromEntries(statusPairs);
@@ -134,23 +136,37 @@ export default function Feed() {
     setPosts(prev => prev.filter(p => p.postId !== postId));
   };
 
-  const markFollowed = (targetUserId) => {
+  const markFollowed = async (targetUserId) => {
     setFollowingMap(prev => ({ ...prev, [targetUserId]: true }));
-    setFollowingCount(count => count + 1);
+    setRequestedMap(prev => ({ ...prev, [targetUserId]: false }));
     setSuggestions(prev => prev.filter(item => String(item.userId) !== String(targetUserId)));
+    const { data } = await followApi.getFollowing(user.userId).catch(() => ({ data: [] }));
+    setFollowingCount(Array.isArray(data) ? new Set(data.map(id => String(id))).size : 0);
     loadFeed();
   };
 
-  const handleFollow = async (userId) => {
+  const markRequested = (targetUserId) => {
+    setRequestedMap(prev => ({ ...prev, [targetUserId]: true }));
+    setFollowingMap(prev => ({ ...prev, [targetUserId]: false }));
+  };
+
+  const handleFollow = async (targetUserId) => {
     if (!user) return;
     try {
-      await followApi.follow(user.userId, userId);
-      markFollowed(userId);
+      const { data } = await followApi.follow(user.userId, targetUserId);
+      if (data?.requested || data?.status === 'REQUESTED') {
+        markRequested(targetUserId);
+      } else {
+        await markFollowed(targetUserId);
+      }
     } catch (err) {
       const status = err.response?.status;
       const message = err.response?.data?.message || err.message || '';
-      if (status === 409 || /already following/i.test(message)) {
-        markFollowed(userId);
+      const { data } = await followApi.getRelationshipStatus(user.userId, targetUserId).catch(() => ({ data: { following: false, requested: false } }));
+      if (data?.requested || data?.status === 'REQUESTED') {
+        markRequested(targetUserId);
+      } else if (status === 409 || /already following/i.test(message) || data?.following) {
+        await markFollowed(targetUserId);
       } else {
         setError(message || 'Could not follow this user.');
       }
@@ -229,11 +245,24 @@ export default function Feed() {
               {isGuest ? <Link to="/register" className="btn-primary">Get started</Link> : <button type="button" onClick={() => { setShowDiscover(true); loadSuggestions(); }} className="btn-primary">Find people to follow</button>}
             </div>
           ) : (
-            posts.map(post => (
-              <div key={post.postId} className="feed-post-shell">
-                <PostCard post={post} onDelete={handleDelete} />
-              </div>
-            ))
+            <>
+              {posts.map(post => (
+                <div key={post.postId} className="feed-post-shell">
+                  <PostCard post={post} onDelete={handleDelete} />
+                </div>
+              ))}
+              {isGuest && (
+                <div className="card p-8 sm:p-10 text-center mb-4 fade-in bg-[radial-gradient(circle_at_12%_10%,rgba(254,218,117,0.24),transparent_28%),radial-gradient(circle_at_88%_0%,rgba(214,41,118,0.18),transparent_32%),#fff]">
+                  <div className="w-14 h-14 rounded-2xl g-primary flex items-center justify-center mx-auto mb-4 text-white font-black text-xl">C</div>
+                  <p className="text-2xl font-black tracking-tight mb-2">You are viewing a guest preview</p>
+                  <p className="text-sm text-neutral-500 max-w-md mx-auto mb-6">Log in or create an account to unlock the full feed, stories, reactions, comments, follows, messages, and personalized suggestions.</p>
+                  <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                    <Link to="/login" className="btn-primary">Log in</Link>
+                    <Link to="/register" className="btn-outline">Create account</Link>
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </section>
 
@@ -266,6 +295,8 @@ export default function Feed() {
                     </Link>
                     {followingMap[item.userId] ? (
                       <span className="text-xs font-bold text-neutral-400">Following</span>
+                    ) : requestedMap[item.userId] ? (
+                      <span className="text-xs font-bold text-neutral-400">Requested</span>
                     ) : (
                       <button type="button" onClick={() => handleFollow(item.userId)} className="px-4 py-2 rounded-lg bg-blue-500 text-white text-xs font-black hover:bg-blue-600">
                         Follow
@@ -312,6 +343,8 @@ export default function Feed() {
                         </Link>
                         {followingMap[item.userId] ? (
                           <span className="text-xs font-bold text-neutral-400">Following</span>
+                        ) : requestedMap[item.userId] ? (
+                          <span className="text-xs font-bold text-neutral-400">Requested</span>
                         ) : (
                           <button
                             type="button"
