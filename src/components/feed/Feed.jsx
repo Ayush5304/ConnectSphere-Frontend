@@ -38,6 +38,7 @@ export default function Feed() {
   const [showDiscover, setShowDiscover] = useState(false);
   const [suggestionsLoading, setSuggestionsLoading] = useState(false);
 
+  const currentUserId = user?.userId ?? user?.id;
   const isGuest = !user || user.role === 'GUEST';
 
   const normalizeFeedPosts = (items = []) => {
@@ -56,12 +57,12 @@ export default function Feed() {
       if (isGuest) {
         const { data } = await postApi.getFeed().catch(() => ({ data: [] }));
         setPosts(normalizeFeedPosts(Array.isArray(data) ? data : []).slice(0, 3));
-      } else {
-        const { data: followingIds } = await followApi.getFollowing(user.userId).catch(() => ({ data: [] }));
+      } else if (currentUserId) {
+        const { data: followingIds } = await followApi.getFollowing(currentUserId).catch(() => ({ data: [] }));
         const followed = Array.isArray(followingIds) ? followingIds.map(Number).filter(Boolean) : [];
         setFollowingCount(followed.length);
 
-        const feedUserIds = Array.from(new Set([Number(user.userId), ...followed]));
+        const feedUserIds = Array.from(new Set([Number(currentUserId), ...followed]));
         const { data } = await postApi.getFeedForUsers(feedUserIds).catch(() => ({ data: [] }));
         const allowedIds = new Set(feedUserIds.map(String));
         const personalPosts = (Array.isArray(data) ? data : []).filter(post => allowedIds.has(String(post.userId)));
@@ -73,17 +74,17 @@ export default function Feed() {
     } finally {
       setLoading(false);
     }
-  }, [user, isGuest]);
+  }, [currentUserId, isGuest]);
 
   const loadSuggestions = useCallback(async () => {
-    if (!user || isGuest) return;
+    if (!user || !currentUserId || isGuest) return;
     setSuggestionsLoading(true);
     try {
-      const { data: followingIds } = await followApi.getFollowing(user.userId).catch(() => ({ data: [] }));
+      const { data: followingIds } = await followApi.getFollowing(currentUserId).catch(() => ({ data: [] }));
       const followed = new Set((Array.isArray(followingIds) ? followingIds : []).map(id => String(id)));
 
-      const { data: suggestedIds } = await followApi.getSuggestions(user.userId).catch(() => ({ data: [] }));
-      const idList = Array.isArray(suggestedIds) ? suggestedIds.filter(id => String(id) !== String(user.userId)) : [];
+      const { data: suggestedIds } = await followApi.getSuggestions(currentUserId).catch(() => ({ data: [] }));
+      const idList = Array.isArray(suggestedIds) ? suggestedIds.filter(id => String(id) !== String(currentUserId)) : [];
       const suggestedUsers = idList.length > 0
         ? await Promise.all(idList.map(id => authApi.getUserById(id).then(r => r.data).catch(() => null)))
         : [];
@@ -95,13 +96,13 @@ export default function Feed() {
       [...suggestedUsers, ...allUsers].filter(Boolean).forEach(item => merged.set(String(item.userId), item));
 
       const base = Array.from(merged.values())
-        .filter(item => String(item.userId) !== String(user.userId))
+        .filter(item => String(item.userId) !== String(currentUserId))
         .filter(item => item.role !== 'ADMIN' && item.role !== 'GUEST')
         .filter(item => item.active !== false);
 
       const statusPairs = await Promise.all(base.map(async item => {
         if (followed.has(String(item.userId))) return [item.userId, true];
-        const { data } = await followApi.getRelationshipStatus(user.userId, item.userId).catch(() => ({ data: { following: false, requested: false } }));
+        const { data } = await followApi.getRelationshipStatus(currentUserId, item.userId).catch(() => ({ data: { following: false, requested: false } }));
         if (data?.requested || data?.status === 'REQUESTED') setRequestedMap(prev => ({ ...prev, [item.userId]: true }));
         return [item.userId, Boolean(data?.following)];
       }));
@@ -116,7 +117,7 @@ export default function Feed() {
     } finally {
       setSuggestionsLoading(false);
     }
-  }, [user, isGuest]);
+  }, [currentUserId, isGuest]);
 
   useEffect(() => {
     loadFeed();
@@ -140,7 +141,7 @@ export default function Feed() {
     setFollowingMap(prev => ({ ...prev, [targetUserId]: true }));
     setRequestedMap(prev => ({ ...prev, [targetUserId]: false }));
     setSuggestions(prev => prev.filter(item => String(item.userId) !== String(targetUserId)));
-    const { data } = await followApi.getFollowing(user.userId).catch(() => ({ data: [] }));
+    const { data } = await followApi.getFollowing(currentUserId).catch(() => ({ data: [] }));
     setFollowingCount(Array.isArray(data) ? new Set(data.map(id => String(id))).size : 0);
     loadFeed();
   };
@@ -151,9 +152,9 @@ export default function Feed() {
   };
 
   const handleFollow = async (targetUserId) => {
-    if (!user) return;
+    if (!user || !currentUserId) return;
     try {
-      const { data } = await followApi.follow(user.userId, targetUserId);
+      const { data } = await followApi.follow(currentUserId, targetUserId);
       if (data?.requested || data?.status === 'REQUESTED') {
         markRequested(targetUserId);
       } else {
@@ -162,7 +163,7 @@ export default function Feed() {
     } catch (err) {
       const status = err.response?.status;
       const message = err.response?.data?.message || err.message || '';
-      const { data } = await followApi.getRelationshipStatus(user.userId, targetUserId).catch(() => ({ data: { following: false, requested: false } }));
+      const { data } = await followApi.getRelationshipStatus(currentUserId, targetUserId).catch(() => ({ data: { following: false, requested: false } }));
       if (data?.requested || data?.status === 'REQUESTED') {
         markRequested(targetUserId);
       } else if (status === 409 || /already following/i.test(message) || data?.following) {
@@ -313,7 +314,7 @@ export default function Feed() {
           <aside className="hidden lg:block">
             <div className="sticky top-24 space-y-5">
               <div className="px-1">
-                <Link to={`/profile/${user?.userId}`} className="flex items-center gap-3 group">
+                <Link to={`/profile/${currentUserId}`} className="flex items-center gap-3 group">
                   <div className="story-ring">
                     <Avatar src={user?.profilePicture} name={user?.fullName || user?.username} className="w-14 h-14 text-base border-2 border-white" />
                   </div>

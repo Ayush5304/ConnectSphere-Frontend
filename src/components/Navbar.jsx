@@ -2,7 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Link, NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import SearchBar from './search/SearchBar';
-import { fetchAuthorizedMediaUrl, notificationApi } from '../api';
+import Avatar from './ui/Avatar';
+import { notificationApi } from '../api';
 
 const BellIcon = ({ size = 21 }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -46,45 +47,11 @@ const ShieldIcon = ({ size = 18 }) => (
   </svg>
 );
 
-function useAuthorizedAvatar(src) {
-  const [avatarUrl, setAvatarUrl] = useState('');
-
-  useEffect(() => {
-    let alive = true;
-    let objectUrl = '';
-
-    if (!src) {
-      setAvatarUrl('');
-      return undefined;
-    }
-
-    const normalized = String(src);
-    if (normalized.startsWith('blob:') || normalized.startsWith('data:')) {
-      setAvatarUrl(normalized);
-      return undefined;
-    }
-
-    fetchAuthorizedMediaUrl(normalized)
-      .then(url => {
-        objectUrl = url;
-        if (alive) setAvatarUrl(url);
-      })
-      .catch(() => {
-        if (alive) setAvatarUrl('');
-      });
-
-    return () => {
-      alive = false;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
-    };
-  }, [src]);
-
-  return avatarUrl;
-}
 export default function Navbar() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const currentUserId = user?.userId ?? user?.id;
 
   const [unread, setUnread] = useState(0);
   const [notifs, setNotifs] = useState([]);
@@ -96,9 +63,9 @@ export default function Navbar() {
   const menuRef = useRef();
 
   useEffect(() => {
-    if (!user || user.role === 'GUEST' || user.role === 'ADMIN') return;
+    if (!user || !currentUserId || user.role === 'GUEST' || user.role === 'ADMIN') return;
 
-    const refreshUnread = () => notificationApi.getUnreadCount(user.userId)
+    const refreshUnread = () => notificationApi.getUnreadCount(currentUserId)
       .then(({ data }) => setUnread(data.count || 0))
       .catch(() => {});
 
@@ -113,7 +80,7 @@ export default function Navbar() {
       window.removeEventListener('focus', refreshUnread);
       if (stream) stream.close();
     };
-  }, [user]);
+  }, [user, currentUserId]);
 
   useEffect(() => {
     const close = (event) => {
@@ -136,7 +103,7 @@ export default function Navbar() {
       return;
     }
     try {
-      const { data } = await notificationApi.getForUser(user.userId);
+      const { data } = await notificationApi.getForUser(currentUserId);
       const items = data || [];
       setNotifs(items);
       setUnread(0);
@@ -147,8 +114,6 @@ export default function Navbar() {
     setShowNotif(true);
   };
 
-  const avatarInitial = user?.username?.[0]?.toUpperCase() || 'C';
-  const avatarSrc = useAuthorizedAvatar(user?.profilePicture);
   const hideSearch = ['/login', '/register', '/admin'].includes(location.pathname);
   const navIconClass = ({ isActive }) =>
     `w-10 h-10 rounded-full flex items-center justify-center transition-colors ${isActive ? 'text-black bg-neutral-100' : 'text-neutral-700 hover:bg-neutral-100'}`;
@@ -217,7 +182,7 @@ export default function Navbar() {
                             <button
                               type="button"
                               onClick={() => {
-                                notificationApi.markAllRead(user.userId).catch(() => {});
+                                notificationApi.markAllRead(currentUserId).catch(() => {});
                                 setNotifs(prev => prev.map(n => ({ ...n, read: true })));
                               }}
                               className="text-xs font-bold text-blue-500 hover:text-blue-600"
@@ -262,11 +227,7 @@ export default function Navbar() {
                       className="flex items-center gap-2 p-1 rounded-full hover:bg-neutral-100"
                       aria-label="Account menu"
                     >
-                      <div className="avatar w-9 h-9 text-sm">
-                        {avatarSrc
-                          ? <img src={avatarSrc} alt="" className="w-full h-full object-cover" />
-                          : avatarInitial}
-                      </div>
+                      <Avatar user={user} className="w-9 h-9 text-sm" />
                     </button>
 
                     {showMenu && (
@@ -279,7 +240,7 @@ export default function Navbar() {
                           <Link to="/admin" className="block px-4 py-2.5 text-sm font-semibold text-rose-600 hover:bg-rose-50">Admin dashboard</Link>
                         ) : (
                           <>
-                            <Link to={`/profile/${user.userId}`} className="block px-4 py-2.5 text-sm hover:bg-neutral-50">Profile</Link>
+                            <Link to={currentUserId ? `/profile/${currentUserId}` : '/'} className="block px-4 py-2.5 text-sm hover:bg-neutral-50">Profile</Link>
                             <Link to="/edit-profile" className="block px-4 py-2.5 text-sm hover:bg-neutral-50">Edit profile</Link>
                             <Link to="/messages" className="block px-4 py-2.5 text-sm hover:bg-neutral-50">Messages</Link>
                             <Link to="/settings" className="block px-4 py-2.5 text-sm hover:bg-neutral-50">Settings and activity</Link>
@@ -354,12 +315,8 @@ export default function Navbar() {
                 <NavLink to="/explore" className="flex items-center justify-center text-neutral-800" aria-label="Explore">
                   <SearchIcon size={23} />
                 </NavLink>
-                <Link to={`/profile/${user.userId}`} className="flex items-center justify-center" aria-label="Profile">
-                  <div className="avatar w-7 h-7 text-xs">
-                    {avatarSrc
-                      ? <img src={avatarSrc} alt="" className="w-full h-full object-cover" />
-                      : avatarInitial}
-                  </div>
+                <Link to={currentUserId ? `/profile/${currentUserId}` : '/'} className="flex items-center justify-center" aria-label="Profile">
+                  <Avatar user={user} className="w-7 h-7 text-xs" />
                 </Link>
               </>
             )}

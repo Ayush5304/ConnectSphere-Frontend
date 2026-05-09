@@ -292,9 +292,12 @@ export default function Profile() {
     setShowStoryCreator(false);
   };
 
-  const setCapturedStoryFile = (file) => {
+  const applyStoryDraft = (file) => {
+    if (!file) return;
     stopCamera();
-    setCapturedStoryFile(file);
+    if (storyPreview) URL.revokeObjectURL(storyPreview);
+    setStoryFile(file);
+    setStoryPreview(URL.createObjectURL(file));
     setStoryError('');
   };
 
@@ -341,7 +344,7 @@ export default function Profile() {
         return;
       }
       const file = new File([blob], 'camera-story-' + Date.now() + '.jpg', { type: 'image/jpeg' });
-      setCapturedStoryFile(file);
+      applyStoryDraft(file);
       stopCamera();
     }, 'image/jpeg', 0.92);
   };
@@ -362,7 +365,7 @@ export default function Profile() {
         return;
       }
       const file = new File([blob], 'camera-story-' + Date.now() + '.webm', { type: 'video/webm' });
-      setCapturedStoryFile(file);
+      applyStoryDraft(file);
       stopCamera();
     };
     recorder.start();
@@ -411,6 +414,11 @@ export default function Profile() {
   const createStoryFromProfile = async () => {
     if (!user || user.role === 'GUEST') return navigate('/login');
     if (!isOwnProfile) return;
+    const currentUserId = user.userId ?? user.id;
+    if (!currentUserId) {
+      setStoryError('Your session is missing a user id. Please log in again.');
+      return;
+    }
     if (!storyFile) {
       setStoryError('Please choose an image or video story first.');
       return;
@@ -419,9 +427,9 @@ export default function Profile() {
     setStoryError('');
     try {
       const formData = new FormData();
-      formData.append('file', storyFile);
-      formData.append('userId', user.userId);
-      formData.append('username', user.username);
+      formData.append('file', storyFile, storyFile.name || 'story-media');
+      formData.append('userId', currentUserId);
+      formData.append('username', user.username || user.fullName || 'user');
       const { data } = await mediaApi.createStory(formData);
       const created = { ...data, createdAt: data.createdAt || new Date().toISOString(), mediaUrl: resolveMediaUrl(data.mediaUrl) };
       setStories(prev => [created, ...prev]);

@@ -18,6 +18,7 @@ export default function Settings() {
   const { user, logout, updateUser } = useAuth();
   const navigate = useNavigate();
   const [query, setQuery] = useState('');
+  const currentUserId = user?.userId ?? user?.id;
   const [privateAccount, setPrivateAccount] = useState(Boolean(user?.privateAccount));
   const [savingPrivacy, setSavingPrivacy] = useState(false);
   const [message, setMessage] = useState('');
@@ -29,21 +30,21 @@ export default function Settings() {
     const key = 'connectsphere-profile-overrides';
     let overrides = {};
     try { overrides = JSON.parse(localStorage.getItem(key) || '{}'); } catch {}
-    if (user?.userId) {
-      overrides[String(user.userId)] = { ...(overrides[String(user.userId)] || {}), privateAccount: value };
+    if (currentUserId) {
+      overrides[String(currentUserId)] = { ...(overrides[String(currentUserId)] || {}), privateAccount: value };
       localStorage.setItem(key, JSON.stringify(overrides));
     }
     updateUser?.({ privateAccount: value });
   };
 
   const togglePrivacy = async () => {
-    if (!user?.userId || savingPrivacy) return;
+    if (!currentUserId || savingPrivacy) return;
     const nextValue = !privateAccount;
     setPrivateAccount(nextValue);
     setSavingPrivacy(true);
     setMessage('');
     try {
-      const { data } = await authApi.updatePrivacy(user.userId, nextValue);
+      const { data } = await authApi.updatePrivacy(currentUserId, nextValue);
       updateUser?.(data || { privateAccount: nextValue });
       setLocalPrivacyFallback(nextValue);
       setMessage(nextValue ? 'Your account is now private.' : 'Your account is now public.');
@@ -59,14 +60,14 @@ export default function Settings() {
   return (
     <main className="max-w-2xl mx-auto bg-white min-h-[calc(100vh-64px)] pb-24">
       <div className="sticky top-16 z-20 bg-white border-b border-neutral-200 px-4 h-16 flex items-center gap-4">
-        <button onClick={() => navigate(-1)} className="text-2xl">?</button>
+        <button onClick={() => navigate(-1)} className="text-sm font-black text-neutral-700" aria-label="Go back">Back</button>
         <h1 className="text-2xl font-black">Settings and activity</h1>
       </div>
       <div className="p-4"><input value={query} onChange={e => setQuery(e.target.value)} className="w-full h-12 rounded-xl bg-neutral-100 px-4 outline-none" placeholder="Search" /></div>
       <p className="px-4 py-2 text-lg font-black text-neutral-500">Your account</p>
       <Link to="/edit-profile" className="flex items-center gap-4 px-4 py-4 border-b border-neutral-100 hover:bg-neutral-50">
         <div className="w-9 h-9 rounded-full border border-neutral-200 flex items-center justify-center">@</div>
-        <div><p className="text-lg font-bold">Accounts Centre</p><p className="text-neutral-500">Profile, password, personal details</p></div><span className="ml-auto text-neutral-400">?</span>
+        <div><p className="text-lg font-bold">Accounts Centre</p><p className="text-neutral-500">Profile, password, personal details</p></div><span className="ml-auto text-neutral-400">&gt;</span>
       </Link>
 
       <div className="flex items-center gap-4 px-4 py-4 border-b border-neutral-100">
@@ -89,7 +90,7 @@ export default function Settings() {
 
       <p className="px-4 pt-5 pb-2 text-lg font-black text-neutral-500">How you use ConnectSphere</p>
       {visible.map(([title, sub, href]) => {
-        const content = <><div className="w-9 h-9 rounded-full border border-neutral-200 flex items-center justify-center">{title[0]}</div><div><p className="text-lg font-bold">{title}</p><p className="text-neutral-500">{sub}</p></div><span className="ml-auto text-neutral-400">?</span></>;
+        const content = <><div className="w-9 h-9 rounded-full border border-neutral-200 flex items-center justify-center">{title[0]}</div><div><p className="text-lg font-bold">{title}</p><p className="text-neutral-500">{sub}</p></div><span className="ml-auto text-neutral-400">&gt;</span></>;
         return href ? <Link key={title} to={href} className="flex items-center gap-4 px-4 py-4 border-b border-neutral-100 hover:bg-neutral-50">{content}</Link> : <div key={title} className="flex items-center gap-4 px-4 py-4 border-b border-neutral-100">{content}</div>;
       })}
       <div className="mt-4 border-t border-neutral-200">

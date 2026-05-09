@@ -53,10 +53,7 @@ const relativeTime = (value) => {
   return Math.floor(hours / 24) + 'd ago';
 };
 
-const clockTime = (value) => value ? new Date(value).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
 const dateLine = (value) => value ? new Date(value).toLocaleDateString([], { month: 'short', day: 'numeric' }) : '';
-const initials = (name) => String(name || 'U').trim().slice(0, 2).toUpperCase();
-
 export default function Messages() {
   const { user } = useAuth();
   const [params, setParams] = useSearchParams();
@@ -70,7 +67,7 @@ export default function Messages() {
   const [actionMessage, setActionMessage] = useState(null);
   const bottomRef = useRef(null);
 
-  const currentUserId = user?.userId;
+  const currentUserId = user?.userId ?? user?.id;
   const activeThreadId = currentUserId && peerId ? threadIdFor(currentUserId, peerId) : '';
   const rawMessages = activeThreadId ? (threads[activeThreadId] || []).map(normalizeMessage) : [];
   const messages = useMemo(

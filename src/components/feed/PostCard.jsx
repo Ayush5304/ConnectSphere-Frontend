@@ -5,7 +5,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import Avatar from '../ui/Avatar';
 
 const REACTIONS = ['LIKE','LOVE','HAHA','WOW','SAD','ANGRY'];
-const EMOJI = { LIKE:'👍', LOVE:'❤️', HAHA:'😂', WOW:'😮', SAD:'😢', ANGRY:'😡' };
+const EMOJI = { LIKE:'\u{1F44D}', LOVE:'\u2764\uFE0F', HAHA:'\u{1F602}', WOW:'\u{1F62E}', SAD:'\u{1F622}', ANGRY:'\u{1F621}' };
 const REACTION_LABEL = { LIKE:'Like', LOVE:'Love', HAHA:'Haha', WOW:'Wow', SAD:'Sad', ANGRY:'Angry' };
 const REACTION_COLOR = { LIKE:'text-blue-600', LOVE:'text-red-500', HAHA:'text-yellow-500', WOW:'text-yellow-500', SAD:'text-yellow-500', ANGRY:'text-orange-500' };
 
@@ -37,8 +37,9 @@ function timeAgo(date) {
 export default function PostCard({ post, onDelete }) {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const currentUserId = user?.userId ?? user?.id;
   const isGuest  = !user || user.role === 'GUEST';
-  const isOwner  = user && String(user.userId) === String(post.userId);
+  const isOwner  = user && String(currentUserId) === String(post.userId);
   const isAdmin  = user?.role === 'ADMIN';
 
   const [showReactions, setShowReactions]     = useState(false);
@@ -71,6 +72,7 @@ export default function PostCard({ post, onDelete }) {
   const [hashtagModal, setHashtagModal]       = useState(null);
   const [hashtagPosts, setHashtagPosts]       = useState([]);
   const [hashtagLoading, setHashtagLoading]   = useState(false);
+  const [actionError, setActionError]           = useState('');
   const editFileRef = useRef();
   const optionsRef  = useRef();
 
@@ -81,11 +83,11 @@ export default function PostCard({ post, onDelete }) {
         setReactionSummary(data);
         setLikesCount(Object.values(data).reduce((a, b) => a + b, 0));
       }).catch(() => {});
-    if (!isGuest) {
-      likeApi.getUserReaction(user.userId, post.postId, 'POST')
+    if (!isGuest && currentUserId) {
+      likeApi.getUserReaction(currentUserId, post.postId, 'POST')
         .then(({ data }) => setUserReaction(data?.reactionType || null)).catch(() => {});
     }
-  }, [post.postId]);
+  }, [post.postId, currentUserId, isGuest]);
 
   useEffect(() => {
     const h = (e) => { if (optionsRef.current && !optionsRef.current.contains(e.target)) setShowOptions(false); };
@@ -94,9 +96,9 @@ export default function PostCard({ post, onDelete }) {
   }, []);
 
   const handleUnreact = async () => {
-    if (isGuest) { navigate('/login'); return; }
+    if (isGuest || !currentUserId) { navigate('/login'); return; }
     try {
-      await likeApi.unreact(user.userId, post.postId, 'POST');
+      await likeApi.unreact(currentUserId, post.postId, 'POST');
       setReactionSummary(prev => {
         const u = { ...prev };
         if (userReaction && u[userReaction]) {
@@ -107,14 +109,14 @@ export default function PostCard({ post, onDelete }) {
       });
       setLikesCount(c => Math.max(0, c - 1));
       setUserReaction(null);
-    } catch {}
+    } catch (err) { setActionError(err.message || 'Action failed. Please try again.'); }
     setShowReactions(false);
   };
 
   const handleReact = async (reaction) => {
-    if (isGuest) { navigate('/login'); return; }
+    if (isGuest || !currentUserId) { navigate('/login'); return; }
     try {
-      await likeApi.react({ userId: user.userId, targetId: post.postId, targetType: 'POST', reactionType: reaction });
+      await likeApi.react({ userId: currentUserId, targetId: post.postId, targetType: 'POST', reactionType: reaction });
       if (!userReaction) setLikesCount(c => c + 1);
       setReactionSummary(prev => {
         const u = { ...prev };
@@ -123,7 +125,7 @@ export default function PostCard({ post, onDelete }) {
         return u;
       });
       setUserReaction(reaction);
-    } catch {}
+    } catch (err) { setActionError(err.message || 'Action failed. Please try again.'); }
     setShowReactions(false);
   };
 
@@ -133,7 +135,7 @@ export default function PostCard({ post, onDelete }) {
         const { data } = await commentApi.getByPost(post.postId);
         setComments(data);
         loadCommentLikes(data);
-      } catch {}
+      } catch (err) { setActionError(err.message || 'Action failed. Please try again.'); }
     }
     setShowComments(prev => !prev);
   };
@@ -143,11 +145,11 @@ export default function PostCard({ post, onDelete }) {
     if (isGuest) { navigate('/login'); return; }
     if (!newComment.trim()) return;
     try {
-      const { data } = await commentApi.add({ postId: post.postId, userId: user.userId, username: user.username, content: newComment });
+      const { data } = await commentApi.add({ postId: post.postId, userId: currentUserId, username: user.username, content: newComment });
       setComments(prev => [...prev, data]);
       setCommentsCount(c => c + 1);
       setNewComment('');
-    } catch {}
+    } catch (err) { setActionError(err.message || 'Action failed. Please try again.'); }
   };
 
   const handleEdit = async () => {
@@ -163,27 +165,27 @@ export default function PostCard({ post, onDelete }) {
       post.content = editContent; post.mediaUrl = mediaUrl;
       setEditMediaUrl(mediaUrl); setEditMediaPreview(mediaUrl);
       setEditMediaFile(null); setEditing(false);
-    } catch {}
+    } catch (err) { setActionError(err.message || 'Action failed. Please try again.'); }
   };
 
   const loadReplies = async (commentId) => {
     if (replies[commentId]) return;
-    try { const { data } = await commentApi.getReplies(commentId); setReplies(prev => ({ ...prev, [commentId]: data })); } catch {}
+    try { const { data } = await commentApi.getReplies(commentId); setReplies(prev => ({ ...prev, [commentId]: data })); } catch (err) { setActionError(err.message || 'Action failed. Please try again.'); }
   };
 
   const handleReply = async (parentCommentId) => {
     if (isGuest) { navigate('/login'); return; }
     if (!replyText.trim()) return;
     try {
-      const { data } = await commentApi.add({ postId: post.postId, userId: user.userId, username: user.username, content: replyText, parentCommentId: String(parentCommentId) });
+      const { data } = await commentApi.add({ postId: post.postId, userId: currentUserId, username: user.username, content: replyText, parentCommentId: String(parentCommentId) });
       setReplies(prev => ({ ...prev, [parentCommentId]: [...(prev[parentCommentId] || []), data] }));
       setReplyText(''); setReplyingTo(null);
-    } catch {}
+    } catch (err) { setActionError(err.message || 'Action failed. Please try again.'); }
   };
 
   const handleReport = async () => {
     if (!reportReason.trim()) return;
-    try { await postApi.report(post.postId, reportReason); setReported(true); setShowReport(false); } catch {}
+    try { await postApi.report(post.postId, reportReason); setReported(true); setShowReport(false); } catch (err) { setActionError(err.message || 'Action failed. Please try again.'); }
   };
 
   const handleEditComment = async (commentId) => {
@@ -193,7 +195,7 @@ export default function PostCard({ post, onDelete }) {
       setComments(prev => prev.map(c => c.commentId === commentId ? { ...c, content: data.content } : c));
       setEditingCommentId(null);
       setEditingCommentText('');
-    } catch {}
+    } catch (err) { setActionError(err.message || 'Action failed. Please try again.'); }
   };
 
   const handleCommentLike = async (commentId) => {
@@ -201,20 +203,20 @@ export default function PostCard({ post, onDelete }) {
     const existing = commentLikes[commentId];
     try {
       if (existing) {
-        await likeApi.unreact(user.userId, commentId, 'COMMENT');
+        await likeApi.unreact(currentUserId, commentId, 'COMMENT');
         setCommentLikes(prev => { const u = { ...prev }; delete u[commentId]; return u; });
       } else {
-        await likeApi.react({ userId: user.userId, targetId: commentId, targetType: 'COMMENT', reactionType: 'LIKE' });
+        await likeApi.react({ userId: currentUserId, targetId: commentId, targetType: 'COMMENT', reactionType: 'LIKE' });
         setCommentLikes(prev => ({ ...prev, [commentId]: true }));
       }
-    } catch {}
+    } catch (err) { setActionError(err.message || 'Action failed. Please try again.'); }
   };
 
   const loadCommentLikes = async (commentsList) => {
     if (isGuest || !commentsList.length) return;
     const results = await Promise.all(
       commentsList.map(c =>
-        likeApi.getUserReaction(user.userId, c.commentId, 'COMMENT')
+        likeApi.getUserReaction(currentUserId, c.commentId, 'COMMENT')
           .then(({ data }) => ({ id: c.commentId, liked: !!data?.reactionType }))
           .catch(() => ({ id: c.commentId, liked: false }))
       )
@@ -231,14 +233,14 @@ export default function PostCard({ post, onDelete }) {
     try {
       const { data } = await searchApi.search('#' + tag);
       setHashtagPosts(data.posts || []);
-    } catch {}
+    } catch (err) { setActionError(err.message || 'Action failed. Please try again.'); }
     setHashtagLoading(false);
   };
 
   const toggleSave = () => {
     if (isGuest) { navigate('/login'); return; }
     let savedIds = [];
-    try { savedIds = JSON.parse(localStorage.getItem('savedPosts') || '[]'); } catch {}
+    try { savedIds = JSON.parse(localStorage.getItem('savedPosts') || '[]'); } catch { savedIds = []; }
     const next = saved ? savedIds.filter(id => id !== post.postId) : [...new Set([...savedIds, post.postId])];
     localStorage.setItem('savedPosts', JSON.stringify(next));
     setSaved(!saved);
@@ -260,6 +262,12 @@ export default function PostCard({ post, onDelete }) {
 
   return (
     <article className="card cinema-card-hover mb-4 overflow-hidden">
+      {actionError && (
+        <div className="mx-4 mt-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-bold text-rose-600 flex items-center justify-between gap-3">
+          <span>{actionError}</span>
+          <button type="button" onClick={() => setActionError('')} className="text-rose-700">Close</button>
+        </div>
+      )}
       {/* Header */}
       <div className="flex items-center gap-3 px-4 py-3">
         <Link to={`/profile/${post.userId}`} className="flex-shrink-0">
@@ -492,17 +500,17 @@ export default function PostCard({ post, onDelete }) {
                       <button onClick={() => { loadReplies(c.commentId); setReplyingTo(replyingTo === c.commentId ? null : c.commentId); setReplyText(''); }}
                         className="text-xs text-gray-500 font-semibold hover:text-violet-600">Reply</button>
                     )}
-                    {user && String(user.userId) === String(c.userId) && (
+                    {user && String(currentUserId) === String(c.userId) && (
                       <button onClick={() => { setEditingCommentId(c.commentId); setEditingCommentText(c.content); }}
                         className="text-xs text-gray-500 hover:text-violet-600">Edit</button>
                     )}
-                    {!isGuest && user && String(user.userId) !== String(c.userId) && (
+                    {!isGuest && user && String(currentUserId) !== String(c.userId) && (
                       <button onClick={async () => {
                         const reason = window.prompt('Why are you reporting this comment?');
                         if (reason?.trim()) await commentApi.report(c.commentId, reason.trim()).catch(() => {});
                       }} className="text-xs text-gray-400 hover:text-red-500">Report</button>
                     )}
-                    {(user && String(user.userId) === String(c.userId) || isAdmin) && (
+                    {(user && String(currentUserId) === String(c.userId) || isAdmin) && (
                       <button onClick={async () => {
                         await commentApi.delete(c.commentId).catch(() => {});
                         setComments(prev => prev.filter(x => x.commentId !== c.commentId));
@@ -526,7 +534,7 @@ export default function PostCard({ post, onDelete }) {
                         </div>
                         <div className="flex items-center gap-3 mt-1 ml-2">
                           <span className="text-xs text-gray-400">{timeAgo(r.createdAt)}</span>
-                          {(user && String(user.userId) === String(r.userId) || isAdmin) && (
+                          {(user && String(currentUserId) === String(r.userId) || isAdmin) && (
                             <button onClick={async () => {
                               await commentApi.delete(r.commentId).catch(() => {});
                               setReplies(prev => ({ ...prev, [c.commentId]: prev[c.commentId].filter(x => x.commentId !== r.commentId) }));
