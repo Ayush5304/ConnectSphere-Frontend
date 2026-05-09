@@ -15,11 +15,14 @@ const saveProfileOverride = (userId, data) => {
   localStorage.setItem(PROFILE_OVERRIDES_KEY, JSON.stringify(overrides));
 };
 
+const getUserId = (user) => user?.userId ?? user?.id;
+
 export default function EditProfile() {
   const { user, login } = useAuth();
   const navigate = useNavigate();
   const fileRef = useRef();
   const coverRef = useRef();
+  const currentUserId = getUserId(user);
 
   const [form, setForm] = useState({
     fullName: user?.fullName || '',
@@ -42,9 +45,9 @@ export default function EditProfile() {
   const [loading, setLoading]               = useState(false);
 
   useEffect(() => {
-    if (!user || user.role === 'GUEST') return;
+    if (!user || user.role === 'GUEST' || !currentUserId) return;
     let alive = true;
-    authApi.getUserById(user.userId)
+    authApi.getUserById(currentUserId)
       .then(({ data }) => {
         if (!alive || !data) return;
         setForm({
@@ -60,7 +63,7 @@ export default function EditProfile() {
       })
       .catch(() => {});
     return () => { alive = false; };
-  }, [user?.userId, user?.role]);
+  }, [currentUserId, user?.role]);
 
   const handlePicChange = (e) => {
     const file = e.target.files[0];
@@ -95,6 +98,10 @@ export default function EditProfile() {
       navigate('/login');
       return;
     }
+    if (!currentUserId) {
+      setError('Could not find your profile id. Please log in again.');
+      return;
+    }
 
     setLoading(true);
     setError('');
@@ -127,27 +134,26 @@ export default function EditProfile() {
         coverPicture: finalCoverUrl || '',
       };
 
-      let savedProfile;
-      try {
-        const { data } = await authApi.updateProfile(payload, user.userId);
-        savedProfile = data || (await authApi.getUserById(user.userId)).data;
-      } catch (saveErr) {
-        saveProfileOverride(user.userId, payload);
-        savedProfile = {
-          ...user,
-          ...payload,
-          userId: user.userId,
-          email: form.email || user.email,
-          role: user.role,
-          verified: user.verified,
-        };
-      }
+      const { data } = await authApi.updateProfile(payload, currentUserId);
+      const refreshed = data?.userId ? data : (await authApi.getUserById(currentUserId)).data;
+      const savedProfile = {
+        ...user,
+        ...(refreshed || {}),
+        ...payload,
+        userId: refreshed?.userId || currentUserId,
+        id: refreshed?.userId || currentUserId,
+        email: refreshed?.email || form.email || user.email,
+        role: refreshed?.role || user.role,
+        verified: refreshed?.verified ?? user.verified,
+      };
+      saveProfileOverride(currentUserId, payload);
 
       const updatedUser = {
         ...user,
         ...savedProfile,
         token: user.token,
-        userId: savedProfile.userId || user.userId,
+        userId: savedProfile.userId || currentUserId,
+        id: savedProfile.userId || currentUserId,
       };
 
       login(updatedUser);
@@ -165,7 +171,7 @@ export default function EditProfile() {
       setCoverFile(null);
       setSuccess(true);
 
-      setTimeout(() => navigate(`/profile/${savedProfile.userId || user.userId}`, { state: { profileUpdatedAt: Date.now() } }), 700);
+      setTimeout(() => navigate(`/profile/${savedProfile.userId || currentUserId}`, { state: { profileUpdatedAt: Date.now() } }), 700);
     } catch (err) {
       setUploading(false);
       const msg = err.response?.data;

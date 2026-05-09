@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useMemo, useState } from 'react';
+﻿import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { postApi, followApi, authApi, mediaApi, resolveMediaUrl } from '../../api';
 import { useAuth } from '../../context/AuthContext';
@@ -8,6 +8,7 @@ import Avatar from '../ui/Avatar';
 import verifiedBadge from '../../assets/verified-badge.svg';
 
 const PROFILE_OVERRIDES_KEY = 'connectsphere-profile-overrides';
+const STORY_ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'video/mp4', 'video/webm'];
 
 const getProfileOverride = (userId) => {
   try {
@@ -31,6 +32,19 @@ const normalizeCounts = (data) => ({
 
 const getPostMedia = (post) => resolveMediaUrl(post?.mediaUrl || post?.media || post?.imageUrl || '');
 const isVideoPost = (post) => /\.(mp4|webm|ogg|mov)$/i.test(getPostMedia(post));
+
+const storyTimeAgo = (value) => {
+  if (!value) return 'Added just now';
+  const created = new Date(value).getTime();
+  if (Number.isNaN(created)) return 'Added just now';
+  const diff = Math.max(0, Date.now() - created);
+  const minutes = Math.floor(diff / 60000);
+  if (minutes < 1) return 'Added just now';
+  if (minutes < 60) return 'Added ' + minutes + 'm ago';
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return 'Added ' + hours + 'h ago';
+  return 'Expired';
+};
 
 function VerifiedBadge() {
   return (
@@ -81,6 +95,19 @@ export default function Profile() {
   const [reported, setReported] = useState(false);
   const [showPayment, setShowPayment] = useState(false);
   const [paymentMsg, setPaymentMsg] = useState('');
+  const [showStoryCreator, setShowStoryCreator] = useState(false);
+  const [storyFile, setStoryFile] = useState(null);
+  const [storyPreview, setStoryPreview] = useState('');
+  const [storyError, setStoryError] = useState('');
+  const [storyUploading, setStoryUploading] = useState(false);
+  const [cameraOpen, setCameraOpen] = useState(false);
+  const [cameraMode, setCameraMode] = useState('photo');
+  const [cameraReady, setCameraReady] = useState(false);
+  const [recording, setRecording] = useState(false);
+  const cameraVideoRef = useRef(null);
+  const cameraStreamRef = useRef(null);
+  const mediaRecorderRef = useRef(null);
+  const recordedChunksRef = useRef([]);
 
   const isOwnProfile = user && String(user.userId) === String(userId);
   const displayName = profileUser?.fullName || profileUser?.username || `User #${userId}`;
@@ -241,6 +268,172 @@ export default function Profile() {
     setReportReason('');
   };
 
+  const stopCamera = () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      try { mediaRecorderRef.current.stop(); } catch {}
+    }
+    if (cameraStreamRef.current) {
+      cameraStreamRef.current.getTracks().forEach(track => track.stop());
+    }
+    cameraStreamRef.current = null;
+    mediaRecorderRef.current = null;
+    recordedChunksRef.current = [];
+    setCameraOpen(false);
+    setCameraReady(false);
+    setRecording(false);
+  };
+
+  const resetStoryCreator = () => {
+    stopCamera();
+    if (storyPreview) URL.revokeObjectURL(storyPreview);
+    setStoryFile(null);
+    setStoryPreview('');
+    setStoryError('');
+    setShowStoryCreator(false);
+  };
+
+  const setCapturedStoryFile = (file) => {
+    stopCamera();
+    setCapturedStoryFile(file);
+    setStoryError('');
+  };
+
+  const startCamera = async (mode = cameraMode) => {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setStoryError('Camera is not available in this browser. Please use file upload.');
+      return;
+    }
+    stopCamera();
+    setCameraMode(mode);
+    setStoryError('');
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'user' },
+        audio: mode === 'video'
+      });
+      cameraStreamRef.current = stream;
+      setCameraOpen(true);
+      setCameraReady(true);
+      window.setTimeout(() => {
+        if (cameraVideoRef.current) {
+          cameraVideoRef.current.srcObject = stream;
+          cameraVideoRef.current.play().catch(() => {});
+        }
+      }, 0);
+    } catch (err) {
+      setStoryError('Camera permission was blocked or unavailable. Allow camera access and try again.');
+      setCameraOpen(false);
+      setCameraReady(false);
+    }
+  };
+
+  const capturePhoto = () => {
+    const video = cameraVideoRef.current;
+    if (!video || !cameraStreamRef.current) return;
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth || 1080;
+    canvas.height = video.videoHeight || 1920;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    canvas.toBlob((blob) => {
+      if (!blob) {
+        setStoryError('Could not capture photo. Please try again.');
+        return;
+      }
+      const file = new File([blob], 'camera-story-' + Date.now() + '.jpg', { type: 'image/jpeg' });
+      setCapturedStoryFile(file);
+      stopCamera();
+    }, 'image/jpeg', 0.92);
+  };
+
+  const startRecording = () => {
+    if (!cameraStreamRef.current || recording) return;
+    recordedChunksRef.current = [];
+    const preferredType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9' : 'video/webm';
+    const recorder = new MediaRecorder(cameraStreamRef.current, { mimeType: preferredType });
+    mediaRecorderRef.current = recorder;
+    recorder.ondataavailable = (event) => {
+      if (event.data?.size > 0) recordedChunksRef.current.push(event.data);
+    };
+    recorder.onstop = () => {
+      const blob = new Blob(recordedChunksRef.current, { type: 'video/webm' });
+      if (!blob.size) {
+        setStoryError('Could not record video. Please try again.');
+        return;
+      }
+      const file = new File([blob], 'camera-story-' + Date.now() + '.webm', { type: 'video/webm' });
+      setCapturedStoryFile(file);
+      stopCamera();
+    };
+    recorder.start();
+    setRecording(true);
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop();
+    }
+    setRecording(false);
+  };
+
+  useEffect(() => () => stopCamera(), []);
+
+  const handleStoryFile = (event) => {
+    const file = event.target.files?.[0];
+    setStoryError('');
+    if (!file) return;
+    if (!STORY_ALLOWED_TYPES.includes(file.type)) {
+      setStoryFile(null);
+      setStoryPreview('');
+      setStoryError('Only JPEG, PNG, WebP images, MP4 videos, and WebM camera clips are allowed.');
+      event.target.value = '';
+      return;
+    }
+    if (storyPreview) URL.revokeObjectURL(storyPreview);
+    setStoryFile(file);
+    setStoryPreview(URL.createObjectURL(file));
+  };
+
+  const removeStoryDraft = () => {
+    stopCamera();
+    if (storyPreview) URL.revokeObjectURL(storyPreview);
+    setStoryFile(null);
+    setStoryPreview('');
+    setStoryError('');
+  };
+
+  const retakeStory = () => {
+    const nextMode = storyFile?.type?.startsWith('video/') ? 'video' : 'photo';
+    removeStoryDraft();
+    startCamera(nextMode);
+  };
+
+  const createStoryFromProfile = async () => {
+    if (!user || user.role === 'GUEST') return navigate('/login');
+    if (!isOwnProfile) return;
+    if (!storyFile) {
+      setStoryError('Please choose an image or video story first.');
+      return;
+    }
+    setStoryUploading(true);
+    setStoryError('');
+    try {
+      const formData = new FormData();
+      formData.append('file', storyFile);
+      formData.append('userId', user.userId);
+      formData.append('username', user.username);
+      const { data } = await mediaApi.createStory(formData);
+      const created = { ...data, createdAt: data.createdAt || new Date().toISOString(), mediaUrl: resolveMediaUrl(data.mediaUrl) };
+      setStories(prev => [created, ...prev]);
+      resetStoryCreator();
+    } catch (err) {
+      const msg = err.response?.data;
+      setStoryError(typeof msg === 'string' ? msg : msg?.message || err.message || 'Could not create story.');
+    } finally {
+      setStoryUploading(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="max-w-4xl mx-auto px-4 py-6">
@@ -310,14 +503,17 @@ export default function Profile() {
           )}
 
           <div className="flex gap-4 mt-6 overflow-x-auto pb-1">
-            <div className="flex-shrink-0 text-center">
-              <div className="w-16 h-16 rounded-full border border-neutral-300 flex items-center justify-center text-2xl mx-auto">+</div>
-              <p className="text-xs font-bold mt-1">New</p>
-            </div>
+            {isOwnProfile && (
+              <button type="button" onClick={() => setShowStoryCreator(true)} className="flex-shrink-0 text-center group">
+                <span className="w-16 h-16 rounded-full border border-neutral-300 bg-white flex items-center justify-center text-2xl mx-auto transition group-hover:border-neutral-900 group-hover:scale-105 group-hover:shadow-md">+</span>
+                <span className="block text-xs font-bold mt-1">New</span>
+              </button>
+            )}
             {stories.slice(0, 6).map((story, index) => (
               <button key={story.storyId || index} type="button" className="flex-shrink-0 text-center">
                 <Avatar src={story.mediaUrl} name={`Story ${index + 1}`} className="w-16 h-16 text-xs border-2 border-neutral-900" />
                 <p className="text-xs font-bold mt-1">Story</p>
+                <p className="text-[11px] text-neutral-500 leading-tight max-w-[76px] truncate">{storyTimeAgo(story.createdAt || story.created_at || story.updatedAt)}</p>
               </button>
             ))}
           </div>
@@ -427,6 +623,149 @@ export default function Profile() {
       )}
 
       </>}
+
+
+      {showStoryCreator && (
+        <div className="story-modal-backdrop fixed inset-0 bg-black/70 z-[85] flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={resetStoryCreator}>
+          <div className="story-composer-shell bg-white w-full sm:max-w-6xl rounded-t-[32px] sm:rounded-[34px] overflow-hidden shadow-[0_30px_100px_rgba(0,0,0,0.35)] border border-white/70" onClick={e => e.stopPropagation()}>
+            <div className="h-16 px-4 sm:px-6 border-b border-neutral-200 flex items-center justify-between bg-white/90 backdrop-blur">
+              <button type="button" onClick={resetStoryCreator} className="w-11 h-11 rounded-full bg-neutral-100 hover:bg-neutral-200 transition text-xl font-black">x</button>
+              <div className="text-center">
+                <h3 className="font-black text-xl tracking-tight">Create story</h3>
+                <p className="hidden sm:block text-xs text-neutral-500 font-semibold">Upload, capture, or record a 24-hour moment</p>
+              </div>
+              <button type="button" onClick={createStoryFromProfile} disabled={!storyFile || storyUploading} className="h-11 px-5 rounded-full bg-blue-500 text-white font-black shadow-lg shadow-blue-500/20 hover:bg-blue-600 disabled:bg-neutral-200 disabled:text-neutral-400 disabled:shadow-none transition">
+                {storyUploading ? 'Posting...' : 'Share'}
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 xl:grid-cols-[minmax(320px,430px)_1fr] gap-0 bg-[radial-gradient(circle_at_top_left,rgba(214,41,118,0.09),transparent_35%),linear-gradient(180deg,#ffffff,#fafafa)]">
+              <section className="p-5 sm:p-7 flex justify-center bg-neutral-950 xl:bg-transparent">
+                <div className="story-preview-card relative w-full max-w-[350px] aspect-[9/14] rounded-[32px] overflow-hidden bg-neutral-950 border border-white/10 shadow-[0_24px_70px_rgba(0,0,0,0.35)] flex items-center justify-center text-center">
+                  <div className="absolute inset-0 opacity-40 bg-[radial-gradient(circle_at_30%_10%,rgba(253,186,116,0.35),transparent_26%),radial-gradient(circle_at_90%_20%,rgba(214,41,118,0.30),transparent_30%),radial-gradient(circle_at_50%_100%,rgba(79,91,213,0.25),transparent_35%)]" />
+                  {cameraOpen ? (
+                    <video ref={cameraVideoRef} className="relative z-10 w-full h-full object-cover" muted playsInline autoPlay />
+                  ) : storyPreview ? (
+                    storyFile?.type?.startsWith('video/') ? <video src={storyPreview} className="relative z-10 w-full h-full object-contain" controls muted /> : <img src={storyPreview} alt="Story preview" className="relative z-10 w-full h-full object-contain" />
+                  ) : (
+                    <div className="relative z-10 px-8 text-white story-empty-pulse">
+                      <div className="w-20 h-20 rounded-full g-primary mx-auto mb-5 flex items-center justify-center text-4xl font-black shadow-2xl">+</div>
+                      <p className="font-black text-2xl leading-tight">Add to your story</p>
+                      <p className="text-sm text-white/60 mt-3">Choose a file, take a photo, or record a video now.</p>
+                    </div>
+                  )}
+                  <div className="absolute left-4 right-4 top-4 z-20 flex gap-1.5">
+                    <span className="h-1 flex-1 rounded-full bg-white/80" />
+                    <span className="h-1 flex-1 rounded-full bg-white/25" />
+                    <span className="h-1 flex-1 rounded-full bg-white/25" />
+                  </div>
+                  <div className="absolute left-4 bottom-4 z-20 rounded-full bg-black/35 px-3 py-1 text-xs font-bold text-white backdrop-blur">
+                    {cameraOpen ? (recording ? 'Recording...' : 'Camera ready') : storyFile ? 'Ready to share' : 'Your story'}
+                  </div>
+                </div>
+              </section>
+
+              <section className="p-5 sm:p-7 space-y-5">
+                <div className="story-tool-card rounded-[28px] border border-neutral-200 bg-white p-5 shadow-sm">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <p className="text-xs font-black uppercase tracking-[0.18em] text-pink-500">Create</p>
+                      <h4 className="text-2xl font-black tracking-tight mt-1">Pick how to add your story</h4>
+                      <p className="text-sm text-neutral-500 mt-1">Upload from gallery, take a fresh photo, or record a quick video from your camera.</p>
+                    </div>
+                    <span className="hidden sm:flex w-12 h-12 rounded-2xl g-primary text-white items-center justify-center font-black shadow-lg">C</span>
+                  </div>
+
+                  <div className="mt-5 grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <label className="story-action-tile group cursor-pointer rounded-[24px] border border-neutral-200 bg-neutral-50 p-4 hover:border-blue-400 hover:bg-blue-50 transition">
+                      <input type="file" accept="image/jpeg,image/png,image/webp,video/mp4,video/webm" onChange={handleStoryFile} className="hidden" />
+                      <span className="flex w-12 h-12 rounded-2xl bg-white border border-neutral-200 items-center justify-center text-xl font-black group-hover:scale-110 transition">UP</span>
+                      <span className="block font-black mt-3">Upload</span>
+                      <span className="block text-xs text-neutral-500 mt-1">Choose media</span>
+                    </label>
+                    <button type="button" onClick={() => startCamera('photo')} className="story-action-tile text-left rounded-[24px] border border-neutral-200 bg-neutral-50 p-4 hover:border-pink-400 hover:bg-pink-50 transition">
+                      <span className="flex w-12 h-12 rounded-2xl bg-white border border-neutral-200 items-center justify-center text-xl font-black">PH</span>
+                      <span className="block font-black mt-3">Photo</span>
+                      <span className="block text-xs text-neutral-500 mt-1">Use camera</span>
+                    </button>
+                    <button type="button" onClick={() => startCamera('video')} className="story-action-tile text-left rounded-[24px] border border-neutral-200 bg-neutral-50 p-4 hover:border-purple-400 hover:bg-purple-50 transition">
+                      <span className="flex w-12 h-12 rounded-2xl bg-white border border-neutral-200 items-center justify-center text-xl font-black">VD</span>
+                      <span className="block font-black mt-3">Video</span>
+                      <span className="block text-xs text-neutral-500 mt-1">Record now</span>
+                    </button>
+                  </div>
+
+                  {cameraOpen && (
+                    <div className="mt-4 rounded-[24px] bg-neutral-950 text-white p-4 story-file-chip">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <p className="font-black">Camera capture</p>
+                          <p className="text-xs text-white/60">{cameraMode === 'photo' ? 'Take a photo from your camera.' : 'Record a short camera video.'}</p>
+                        </div>
+                        <button type="button" onClick={stopCamera} className="rounded-full bg-white/10 px-3 py-1 text-xs font-black hover:bg-white/20">Close camera</button>
+                      </div>
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        {cameraMode === 'photo' ? (
+                          <button type="button" onClick={capturePhoto} disabled={!cameraReady} className="h-11 px-5 rounded-full bg-white text-neutral-950 font-black disabled:opacity-50">Capture photo</button>
+                        ) : recording ? (
+                          <button type="button" onClick={stopRecording} className="h-11 px-5 rounded-full bg-rose-500 text-white font-black story-recording-dot">Stop recording</button>
+                        ) : (
+                          <button type="button" onClick={startRecording} disabled={!cameraReady} className="h-11 px-5 rounded-full bg-white text-neutral-950 font-black disabled:opacity-50">Start recording</button>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {storyFile && (
+                    <div className="mt-4 rounded-[26px] overflow-hidden bg-neutral-950 text-white story-upload-ready-card story-file-chip">
+                      <div className="p-4 sm:p-5 flex items-start gap-4">
+                        <div className="w-12 h-12 rounded-2xl g-primary flex items-center justify-center font-black shadow-lg">
+                          {storyFile.type?.startsWith('video/') ? 'VD' : 'PH'}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-black uppercase tracking-[0.16em] text-white/45">Ready to upload</p>
+                          <p className="font-black truncate mt-1">{storyFile.name}</p>
+                          <p className="text-xs text-white/60 mt-1">{storyFile.type} - {Math.max(1, Math.round(storyFile.size / 1024))} KB</p>
+                          <p className="text-sm text-white/70 mt-3">Your captured media is ready. Click upload to post it as your story.</p>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-3 border-t border-white/10">
+                        <button type="button" onClick={createStoryFromProfile} disabled={storyUploading} className="col-span-2 h-14 bg-white text-neutral-950 font-black hover:bg-blue-50 disabled:opacity-60 transition">
+                          {storyUploading ? 'Uploading...' : 'Upload to story'}
+                        </button>
+                        <button type="button" onClick={retakeStory} disabled={storyUploading} className="h-14 bg-white/10 font-black hover:bg-white/15 disabled:opacity-60 transition">Retake</button>
+                      </div>
+                      <button type="button" onClick={removeStoryDraft} disabled={storyUploading} className="w-full h-12 border-t border-white/10 text-sm font-black text-white/70 hover:text-white hover:bg-white/10 disabled:opacity-60 transition">Remove draft</button>
+                    </div>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="story-mini-card rounded-2xl border border-neutral-200 bg-white p-4">
+                    <p className="font-black text-sm">Duration</p>
+                    <p className="text-xs text-neutral-500 mt-1">Visible for 24 hours</p>
+                  </div>
+                  <div className="story-mini-card rounded-2xl border border-neutral-200 bg-white p-4">
+                    <p className="font-black text-sm">Camera</p>
+                    <p className="text-xs text-neutral-500 mt-1">Photo and video capture</p>
+                  </div>
+                  <div className="story-mini-card rounded-2xl border border-neutral-200 bg-white p-4">
+                    <p className="font-black text-sm">Format</p>
+                    <p className="text-xs text-neutral-500 mt-1">Image, MP4, WebM</p>
+                  </div>
+                </div>
+
+                {storyError && <p className="story-error-card rounded-2xl bg-rose-50 border border-rose-100 px-4 py-3 text-sm font-bold text-rose-600">{storyError}</p>}
+
+                <div className="rounded-[24px] bg-neutral-100 p-4 text-sm text-neutral-600">
+                  <p className="font-black text-neutral-950 mb-1">Tip for a better story</p>
+                  <p>For best results, hold your phone or webcam vertically. Browser camera video is saved as WebM and posts like a normal story.</p>
+                </div>
+              </section>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showReport && (
         <div className="fixed inset-0 bg-black/55 z-[80] flex items-center justify-center p-4" onClick={() => setShowReport(false)}>

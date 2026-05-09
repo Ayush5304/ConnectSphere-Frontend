@@ -42,9 +42,12 @@ const AuthContext = createContext(null);
 export function AuthProvider({ children }) {
   const normalizeUserMedia = (data) => {
     if (!data || typeof data !== 'object') return data;
+    const rawUserId = data.userId ?? data.id;
+    const normalizedUserId = rawUserId != null ? Number(rawUserId) : rawUserId;
     return {
       ...data,
-      userId: data.userId != null ? Number(data.userId) : data.userId,
+      id: normalizedUserId ?? data.id,
+      userId: normalizedUserId,
       verified: data.verified === true || data.verified === 'true',
       privateAccount: data.privateAccount === true || data.privateAccount === 'true',
       profilePicture: resolveMediaUrl(data.profilePicture || ''),
